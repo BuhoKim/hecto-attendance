@@ -10,6 +10,7 @@ import { getLeaveDisplayLabel } from './leaveRules';
 const normalizeSet = (values = []) => new Set(values.map((value) => normalizeDeptName(value)));
 
 const isInDeptSet = (dept, deptSet) => deptSet.has(normalizeDeptName(dept));
+const LEAVE_PAGE_SIZE = 500;
 
 function toAllDayEndExclusive(endDate) {
   return addDaysToDateStr(endDate, 1);
@@ -27,12 +28,25 @@ function getDefaultWindow() {
 
 export async function buildLeaveIcsForDepartments({
   departments = MANAGEMENT_DEPTS,
+  subscriptionOwnerId = null,
+  subscriptionOwnerEmpNo = null,
   from,
   to,
   calendarName = '연차 현황',
   calendarDescription = '',
 } = {}) {
   const supabase = getAdminClient();
+  if (subscriptionOwnerEmpNo || subscriptionOwnerId) {
+    let ownerEmpNo = subscriptionOwnerEmpNo;
+    if (!ownerEmpNo) {
+    const { data: profile } = await supabase.from('sa_profiles').select('emp_no').eq('id', subscriptionOwnerId).maybeSingle();
+      ownerEmpNo = profile?.emp_no;
+    }
+    const { data: owner } = ownerEmpNo
+      ? await supabase.from('sa_employees').select('dept, is_active').eq('emp_no', ownerEmpNo).maybeSingle()
+      : { data: null };
+    departments = owner?.is_active !== false && owner?.dept ? [owner.dept] : [];
+  }
   const window = from && to ? { from, to } : getDefaultWindow();
   const deptSet = normalizeSet(departments);
 
@@ -56,23 +70,31 @@ export async function buildLeaveIcsForDepartments({
     });
   }
 
-  let query = supabase
-    .from('sa_leaves')
-    .select('emp_no, emp_name, start_date, end_date, leave_code, leave_name, leave_days, status')
-    .eq('status', '40')
-    .in('emp_no', targetEmpNos);
+  const leaves = [];
+  for (let offset = 0; ; offset += LEAVE_PAGE_SIZE) {
+    let query = supabase
+      .from('sa_leaves')
+      .select('emp_no, emp_name, start_date, end_date, leave_code, leave_name, leave_days, status')
+      .eq('status', '40')
+      .in('emp_no', targetEmpNos);
 
-  if (from) {
-    query = query.gte('end_date', from);
-  }
-  if (to) {
-    query = query.lte('start_date', to);
-  }
+    if (from) {
+      query = query.gte('end_date', from);
+    }
+    if (to) {
+      query = query.lte('start_date', to);
+    }
 
-  const { data: leaves, error: leaveError } = await query;
+    // A unique order keeps page boundaries stable, including same-day leaves.
+    const { data: page, error: leaveError } = await query
+      .order('id', { ascending: true })
+      .range(offset, offset + LEAVE_PAGE_SIZE - 1);
 
-  if (leaveError) {
-    throw new Error(`휴가 목록 조회 실패: ${leaveError.message}`);
+    if (leaveError) {
+      throw new Error(`휴가 목록 조회 실패: ${leaveError.message}`);
+    }
+    leaves.push(...(page || []));
+    if (!page || page.length < LEAVE_PAGE_SIZE) break;
   }
 
   const employeeMap = new Map(targetEmployees.map((emp) => [String(emp.emp_no || '').trim(), emp]));
