@@ -1,7 +1,7 @@
 /** Backfill CAPS (tenter) attendance records into Supabase. */
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient } = require('./supabaseClient');
 
 loadSyncEnv();
 const COMPANY_CODE = process.env.MY_COMPANY_CODE || '1600';
@@ -16,9 +16,7 @@ const mysqlConfig = {
   port: Number(process.env.MYSQL_PORT || 3306),
   connectTimeout: 15000,
 };
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+const supabase = createSyncSupabaseClient();
 
 const compactDate = (value) => {
   const text = String(value || '').trim();

@@ -10,18 +10,14 @@ const fs   = require('fs');
 const path = require('path');
 const os   = require('os');
 const Database = require('better-sqlite3');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient } = require('./supabaseClient');
 
 const SYNC_INTERVAL_MS = parseInt(process.env.SYNC_INTERVAL_MS) || 180_000;
 const DB_FOLDER = process.env.SECOM_DB_PATH
   || 'C:\\(주)에스원\\세콤매니저(근태·식당) v9.0.1\\Database';
 const MY_COMPANY_CODE = process.env.MY_COMPANY_CODE || '1600';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const supabase = createSyncSupabaseClient();
 
 function log(level, msg, detail = '') {
   const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });

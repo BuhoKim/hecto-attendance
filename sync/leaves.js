@@ -7,7 +7,7 @@
 const { loadSyncEnv } = require('./loadEnv');
 loadSyncEnv();
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient } = require('./supabaseClient');
 
 const SYNC_INTERVAL_MS = parseInt(process.env.LEAVES_SYNC_INTERVAL_MS) || 600_000; // 10분
 const MY_COMPANY_CODE  = process.env.MY_COMPANY_CODE || '1600';
@@ -22,11 +22,7 @@ const MYSQL_CONFIG = {
   connectTimeout: 15_000,
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const supabase = createSyncSupabaseClient();
 
 
 function log(level, msg, detail = '') {

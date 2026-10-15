@@ -13,8 +13,8 @@ function loadWorker() {
     require(name) {
       if (name === './loadEnv') return { loadSyncEnv() {} };
       if (name === 'mysql2/promise') return {};
-      if (name === '@supabase/supabase-js') return {
-        createClient: () => ({
+      if (name === './supabaseClient') return {
+        createSyncSupabaseClient: () => ({
           from(table) {
             assert.equal(table, 'sa_attendance', 'must not update checkpoints');
             return { async upsert(rows, options) { writes.push({ rows, options }); return { error: null }; } };

@@ -16,7 +16,7 @@
 
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient } = require('./supabaseClient');
 
 loadSyncEnv();
 
@@ -36,11 +36,7 @@ const MYSQL_CONFIG = {
   connectTimeout: 15000,
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const supabase = createSyncSupabaseClient();
 
 function parseATime(eDate, eTime) {
   const s = `${String(eDate).replace(/\D/g, '')}${String(eTime).replace(/\D/g, '').padStart(6, '0')}`;

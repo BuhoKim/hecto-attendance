@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
+    "check:supabase": "node check-supabase.js",
+    "test:config": "node --test ../test/syncSupabaseConfig.test.mjs",
     "list:hr": "node list-hr-employees.js",
     "employees": "node employees.js",
     "sync:employees": "node employees.js",

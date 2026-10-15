@@ -13,7 +13,7 @@
 
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
-const { createClient } = require('@supabase/supabase-js');
+const { createSyncSupabaseClient } = require('./supabaseClient');
 
 loadSyncEnv();
 
@@ -30,11 +30,7 @@ const MYSQL_CONFIG = {
   connectTimeout: 15_000,
 };
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const supabase = createSyncSupabaseClient();
 
 const GATE_MAPPING = {
   '4000': 'CAPS',
