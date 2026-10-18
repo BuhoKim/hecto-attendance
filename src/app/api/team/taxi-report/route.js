@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { isLeaderPosition } from '@/lib/roleUtils';
 import { fetchKakaoTaxiReportData } from '@/lib/kakaoTaxiAuditApi';
@@ -120,7 +121,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('[Taxi Report API Error]', error);
     return NextResponse.json(
-      { error: String(error?.message || error || '카카오T 이용 분석 리포트를 불러오지 못했습니다.') },
+      { error: publicErrorMessage(error, '카카오T 이용 분석 리포트를 불러오지 못했습니다.') },
       { status: 500 }
     );
   }

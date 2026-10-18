@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { deleteScheduleOverride, saveScheduleOverride } from '@/lib/supabaseDb';
 import { isAdminRole, isLeaderPosition } from '@/lib/roleUtils';
@@ -38,7 +39,7 @@ export async function POST(request) {
     return NextResponse.json({ success: true, message: '근무시간이 저장되었습니다.' });
   } catch (err) {
     console.error('[Schedule Override API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -65,6 +66,6 @@ export async function DELETE(request) {
     return NextResponse.json({ success: true, message: '근무시간 예외가 삭제되었습니다.' });
   } catch (err) {
     console.error('[Schedule Override API DELETE]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }

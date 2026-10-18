@@ -1,6 +1,9 @@
 import { Buffer } from 'node:buffer';
 import * as XLSX from 'xlsx';
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_SHEET_ROWS = 50_000;
+
 export const COMPANY_CODE = '1600';
 
 function normalizeText(value) {
@@ -403,7 +406,12 @@ function parseDelimitedText(text, employeeIndex) {
 }
 
 function parseWorkbook(buffer, employeeIndex) {
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false, raw: false });
+  const workbook = XLSX.read(buffer, {
+    type: 'buffer',
+    cellDates: false,
+    raw: false,
+    sheetRows: MAX_SHEET_ROWS,
+  });
   const firstSheetName = workbook.SheetNames[0];
 
   if (!firstSheetName) {
@@ -422,6 +430,9 @@ export async function parseCapsAttendanceFile(file, employees = []) {
 
   if (isWorkbook) {
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (buffer.length > MAX_UPLOAD_BYTES) {
+      throw new Error('파일 크기는 10MB 이하만 업로드할 수 있습니다.');
+    }
     return parseWorkbook(buffer, employeeIndex);
   }
 

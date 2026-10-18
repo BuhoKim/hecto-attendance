@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
+import { verifySession } from '@/lib/auth';
 import { buildLeaveIcsForDepartments } from '@/lib/icalFeed';
 import { MANAGEMENT_DEPTS } from '@/lib/ical';
 import { buildIcalHeaders } from '@/lib/icalHttp';
@@ -9,6 +11,10 @@ export const fetchCache = 'force-no-store';
 
 export async function GET(request) {
   try {
+    const session = await verifySession(request);
+    if (!session || (!session.isAdmin && !session.isLeader)) {
+      return NextResponse.json({ error: '관리자 또는 팀장 권한이 필요합니다.' }, { status: 403 });
+    }
     const url = new URL(request.url);
     const ics = await buildLeaveIcsForDepartments({
       departments: MANAGEMENT_DEPTS,
@@ -25,6 +31,6 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error('[ICS Leaves]', error);
-    return NextResponse.json({ error: error?.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(error) }, { status: 500 });
   }
 }

@@ -5,17 +5,6 @@ const includesAny = (value, keywords = []) => {
   return keywords.some((keyword) => text.includes(normalizeRoleText(keyword)));
 };
 
-const ADMIN_KEYWORDS = [
-  '관리자',
-  '최고관리자',
-  '시스템 관리자',
-  '운영 관리자',
-  'admin',
-  'administrator',
-  'super admin',
-  'root',
-];
-
 const LEADER_KEYWORDS = [
   '팀장',
   '리더',
@@ -37,10 +26,9 @@ const EXECUTIVE_KEYWORDS = [
   '임원',
 ];
 
-export const isAdminRole = ({ isAdmin = false, is_admin = false, position = '', rank = '' } = {}) => {
-  if (isAdmin || is_admin) return true;
-  return includesAny(`${position} ${rank}`, ADMIN_KEYWORDS);
-};
+// Display labels are editable and must never be used as authorization claims.
+export const isAdminRole = ({ isAdmin = false, is_admin = false } = {}) =>
+  isAdmin === true || is_admin === true;
 
 export const isLeaderPosition = (position = '') => includesAny(position, LEADER_KEYWORDS);
 

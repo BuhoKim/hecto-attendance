@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
 import {
@@ -214,7 +215,7 @@ export async function POST(request) {
     });
   } catch (err) {
     console.error('[Manual Checkin API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -357,6 +358,6 @@ export async function PUT(request) {
     return NextResponse.json({ success: true, message: '처리가 완료되었습니다.' });
   } catch (err) {
     console.error('[Manual Checkin Decide API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }

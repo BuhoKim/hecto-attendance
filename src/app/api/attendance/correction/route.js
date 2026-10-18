@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
 import {
@@ -104,7 +105,7 @@ export async function POST(request) {
     return NextResponse.json({ success: true, message: '근태 보정이 저장되었습니다.' });
   } catch (err) {
     console.error('[Correction API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -184,6 +185,6 @@ export async function DELETE(request) {
     return NextResponse.json({ success: true, message: '근태 보정이 삭제되었습니다.' });
   } catch (err) {
     console.error('[Correction API DELETE]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }

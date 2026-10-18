@@ -105,7 +105,7 @@ export async function fetchAttendanceLogs(yearMonth, options = {}) {
   const pad2 = (num) => String(num).padStart(2, '0');
 
   const empNoArr = (() => {
-    if (!options.empNo) return null;
+    if (options.empNo == null) return null;
     if (Array.isArray(options.empNo)) return options.empNo;
     return String(options.empNo).split(',').map(s => s.trim()).filter(Boolean);
   })();
@@ -268,6 +268,31 @@ export async function fetchAttendanceLogs(yearMonth, options = {}) {
     if (empNoArr) leavesQuery = leavesQuery.in('emp_no', empNoArr);
 
     const fetchLogs = async () => {
+      const pageSize = 1000;
+      const fetchLogPages = async (empNos = null) => {
+        const rows = [];
+        let from = 0;
+
+        while (true) {
+          let query = supabase
+            .from('sa_attendance')
+            .select('id, sabun, emp_no, card_no, a_time, log_time, eq_code, gate_name, flag1, event_type, source')
+            .gte('log_time', logTimeFrom)
+            .lte('log_time', logTimeTo)
+            .order('log_time', { ascending: true })
+            .range(from, from + pageSize - 1);
+          if (empNos) query = query.in('emp_no', empNos);
+
+          const { data, error } = await query;
+          if (error) throw error;
+          rows.push(...(data || []));
+          if (!data || data.length < pageSize) break;
+          from += pageSize;
+        }
+
+        return rows;
+      };
+
       if (empNoArr) {
         const chunkSize = 5;
         const chunks = [];
@@ -277,18 +302,9 @@ export async function fetchAttendanceLogs(yearMonth, options = {}) {
 
         try {
           const results = await Promise.all(
-            chunks.map(async (chunk) => {
-              const { data, error } = await supabase
-                .from('sa_attendance')
-                .select('id, sabun, emp_no, card_no, a_time, log_time, eq_code, gate_name, flag1, event_type, source')
-                .in('emp_no', chunk)
-                .gte('log_time', logTimeFrom)
-                .lte('log_time', logTimeTo)
-                .order('log_time', { ascending: true });
-
-              if (error) throw error;
-              return data || [];
-            })
+          chunks.map(async (chunk) => {
+              return fetchLogPages(chunk);
+          })
           );
           return { data: results.flat(), error: null };
         } catch (err) {
@@ -296,7 +312,10 @@ export async function fetchAttendanceLogs(yearMonth, options = {}) {
         }
       }
 
-      return supabase.rpc('get_attendance_logs_json', { log_time_from: logTimeFrom, log_time_to: logTimeTo });
+      // This server-side client uses service_role. Calling the SECURITY DEFINER RPC
+      // here would have auth.uid() = NULL and return an empty result by design.
+      // Query directly instead; service_role access is kept server-only.
+      return { data: await fetchLogPages(), error: null };
     };
 
     const fetchPromises = [
@@ -596,19 +615,21 @@ export async function fetchScheduleOverrides(yearMonth) {
 /**
  * 吏곸썝蹂?湲곕낯 異쒓렐?쒓컙 議고쉶
  */
-export async function fetchEmployeeSchedules() {
+export async function fetchEmployeeSchedules(empNos = null) {
+  if (empNos?.length === 0) return [];
   const supabase = getAdminClient();
-  const primary = await supabase
+  const scoped = query => empNos ? query.in('emp_no', empNos) : query;
+  const primary = await scoped(supabase
     .from('sa_employee_schedules')
-    .select('emp_no, schedule_time, schedule_end_time, updated_at, updated_by');
+    .select('emp_no, schedule_time, schedule_end_time, updated_at, updated_by'));
 
   if (!primary.error) return primary.data || [];
 
   const message = String(primary.error.message || '').toLowerCase();
   if (message.includes('schedule_end_time') || primary.error.code === '42703') {
-    const fallback = await supabase
+    const fallback = await scoped(supabase
       .from('sa_employee_schedules')
-      .select('emp_no, schedule_time, updated_at, updated_by');
+      .select('emp_no, schedule_time, updated_at, updated_by'));
     if (fallback.error) return [];
     return (fallback.data || []).map((row) => ({ ...row, schedule_end_time: null }));
   }
@@ -1127,11 +1148,14 @@ export async function saveOvertimeSettings(deptName, thresholdTime, isActive) {
 /**
  * 吏곸썝蹂?珥덇낵洹쇰Т 李⑥닔/湲곌컙 議고쉶
  */
-export async function fetchEmployeeOvertimeRounds() {
+export async function fetchEmployeeOvertimeRounds(empNos = null) {
+  if (empNos?.length === 0) return [];
   const supabase = getAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from('sa_employee_overtime_rounds')
     .select('emp_no, round_name, start_date, end_date');
+  if (empNos) query = query.in('emp_no', empNos);
+  const { data, error } = await query;
   if (error) {
     console.error('fetchEmployeeOvertimeRounds error:', error);
     return [];

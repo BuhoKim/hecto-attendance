@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import mysql from 'mysql2/promise';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
@@ -215,7 +216,6 @@ export async function GET(request) {
       INNER JOIN hr_department d ON
         d.I_COMPANY = e.I_COMPANY AND d.I_DEPT = e.I_DEPT
       WHERE y.I_COMPANY = ?
-        AND y.I_STATUS = '40'
         AND y.D_END_DATE >= ?
         AND y.D_START_DATE <= ?
     `, [MY_COMPANY_CODE, fromDateStr, toDateStr]);
@@ -244,7 +244,19 @@ export async function GET(request) {
         }
       }
 
-      await supabase.from('sa_leaves').upsert(uniqueRecords, { onConflict: 'emp_no,start_date,leave_code' });
+      const sourceKeys = new Set(uniqueRecords.map((r) => `${r.emp_no}_${r.start_date}_${r.leave_code}`));
+      const { data: existingLeaves, error: existingLeavesError } = await supabase
+        .from('sa_leaves')
+        .select('emp_no, start_date, end_date, leave_code')
+        .gte('end_date', fromDateStr)
+        .lte('start_date', toDateStr);
+      if (existingLeavesError) throw existingLeavesError;
+      const revokedRecords = (existingLeaves || [])
+        .filter((r) => !sourceKeys.has(`${r.emp_no}_${r.start_date}_${r.leave_code}`))
+        .map((r) => ({ ...r, status: 'CANCELLED', synced_at: new Date().toISOString() }));
+
+      const syncRecords = [...uniqueRecords, ...revokedRecords];
+      await supabase.from('sa_leaves').upsert(syncRecords, { onConflict: 'emp_no,start_date,leave_code' });
       uniqueLeaveCount = uniqueRecords.length;
 
       // 네이버웍스 프로필 상태 동기화
@@ -265,7 +277,7 @@ export async function GET(request) {
           };
         });
 
-        await syncLeavesToNaverWorks(leavesWithEmails);
+        await syncLeavesToNaverWorks(leavesWithEmails.filter((leave) => String(leave.status || '') === '40'));
       } catch (nwErr) {
         console.error('[Sync API Trigger NaverWorks Error]', nwErr.message);
       }
@@ -285,7 +297,7 @@ export async function GET(request) {
     console.error('[Sync API Trigger Error]', err);
     return NextResponse.json({
       success: false,
-      error: err.message
+      error: publicErrorMessage(err, '동기화 중 오류가 발생했습니다.')
     }, { status: 500 });
   } finally {
     if (conn) await conn.end();

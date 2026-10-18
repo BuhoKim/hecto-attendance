@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { getAdminClient } from './supabaseClient.js';
 
 const TABLE_NAME = 'sa_taxi_explanations';
-const SECRET_KEY = process.env.TAXI_AUDIT_TOKEN_SECRET || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'hecto-taxi-secret-2026';
+const getSecretKey = () => process.env.TAXI_AUDIT_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 function base64UrlEncode(str) {
   return Buffer.from(str)
@@ -24,10 +24,12 @@ function base64UrlDecode(str) {
  * 정보가 포함된 자체 검증 가능한 보안 토큰 생성
  */
 export function encodeTaxiToken(payload) {
+  const secretKey = getSecretKey();
+  if (!secretKey) throw new Error('택시 소명 토큰 비밀키가 설정되지 않았습니다.');
   const jsonStr = JSON.stringify(payload);
   const encodedPayload = base64UrlEncode(jsonStr);
   const signature = crypto
-    .createHmac('sha256', SECRET_KEY)
+    .createHmac('sha256', secretKey)
     .update(encodedPayload)
     .digest('hex')
     .slice(0, 16);
@@ -39,17 +41,20 @@ export function encodeTaxiToken(payload) {
  */
 export function decodeTaxiToken(token) {
   if (!token || typeof token !== 'string') return null;
+  const secretKey = getSecretKey();
+  if (!secretKey) return null;
   const parts = token.split('.');
   if (parts.length !== 2) return null;
 
   const [encodedPayload, signature] = parts;
   const expectedSignature = crypto
-    .createHmac('sha256', SECRET_KEY)
+    .createHmac('sha256', secretKey)
     .update(encodedPayload)
     .digest('hex')
     .slice(0, 16);
 
-  if (signature !== expectedSignature) {
+  if (signature !== expectedSignature) return null;
+  if (false) {
     // 서명이 맞지 않으면 하위 호환성 체크 후 실패
     try {
       const parsed = JSON.parse(base64UrlDecode(encodedPayload));

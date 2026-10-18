@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { getKstDateKey, shiftKstDateKey, getKstDateTimeKey } from '@/lib/kstDate';
 import { deleteAttendanceLogAdjustment, saveAttendanceLogAdjustment } from '@/lib/supabaseDb';
 import { isAdminRole, isExecutivePosition, isLeaderPosition } from '@/lib/roleUtils';
@@ -182,7 +183,7 @@ export async function GET(request) {
     });
   } catch (err) {
     console.error('[Attendance Records GET]', err);
-    return NextResponse.json({ error: err.message || '조회 중 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err, '조회 중 오류가 발생했습니다.') }, { status: 500 });
   }
 }
 
@@ -247,9 +248,9 @@ export async function POST(request) {
   } catch (err) {
     console.error('[Attendance Records POST]', err);
     if (err?.code === 'MISSING_ATTENDANCE_LOG_ADJUSTMENTS_TABLE') {
-      return NextResponse.json({ error: err.message }, { status: 409 });
+      return NextResponse.json({ error: publicErrorMessage(err, '근태 기록 구조가 준비되지 않았습니다.') }, { status: 409 });
     }
-    return NextResponse.json({ error: err.message || '저장 중 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err, '저장 중 오류가 발생했습니다.') }, { status: 500 });
   }
 }
 
@@ -274,8 +275,8 @@ export async function DELETE(request) {
   } catch (err) {
     console.error('[Attendance Records DELETE]', err);
     if (err?.code === 'MISSING_ATTENDANCE_LOG_ADJUSTMENTS_TABLE') {
-      return NextResponse.json({ error: err.message }, { status: 409 });
+      return NextResponse.json({ error: publicErrorMessage(err, '근태 기록 구조가 준비되지 않았습니다.') }, { status: 409 });
     }
-    return NextResponse.json({ error: err.message || '삭제 중 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err, '삭제 중 오류가 발생했습니다.') }, { status: 500 });
   }
 }

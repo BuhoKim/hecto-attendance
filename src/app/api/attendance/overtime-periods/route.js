@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { fetchOvertimePeriods, saveOvertimePeriod, deleteOvertimePeriod } from '@/lib/supabaseDb';
 import { isAdminRole } from '@/lib/roleUtils';
@@ -14,7 +15,7 @@ export async function GET(request) {
     return NextResponse.json({ success: true, periods });
   } catch (err) {
     console.error('[Overtime Periods GET API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -45,7 +46,7 @@ export async function POST(request) {
     return NextResponse.json({ success: true, message: '초과시간 관리 기간이 등록되었습니다.' });
   } catch (err) {
     console.error('[Overtime Periods POST API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -71,6 +72,6 @@ export async function DELETE(request) {
     return NextResponse.json({ success: true, message: '초과시간 관리 기간이 삭제되었습니다.' });
   } catch (err) {
     console.error('[Overtime Periods DELETE API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }

@@ -22,6 +22,8 @@ export async function POST(request) {
       .from('sa_profiles')
       .select('id, emp_no')
       .eq('emp_no', empNo)
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (profileErr) {

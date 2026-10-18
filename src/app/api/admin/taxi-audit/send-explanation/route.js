@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { sendTaxiAuditExplanationMail } from '@/lib/taxiAuditMail';
 import { createOrGetTaxiExplanation } from '@/lib/taxiExplanationDb';
@@ -40,8 +41,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('[Taxi audit send explanation]', error);
     return NextResponse.json({
-      error: String(error?.message || error || '소명 요청 메일 발송에 실패했습니다.'),
+      error: publicErrorMessage(error, '소명 요청 메일 발송에 실패했습니다.'),
     }, { status: 500 });
   }
 }
-

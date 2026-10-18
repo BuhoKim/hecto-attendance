@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { createIcalSubscriptionToken, normalizeIcalDeptList } from '@/lib/icalToken';
 import {
@@ -62,6 +63,7 @@ export async function GET(request) {
         label: record.label || '비공개 iCal 구독',
         depts: Array.isArray(record.depts) ? record.depts : [],
         scope: record.scope || 'leave-calendar',
+        ownerEmpNo: record.owner_emp_no || null,
         isActive: record.is_active !== false && !record.revoked_at,
         revokedAt: record.revoked_at || null,
         createdAt: record.created_at || null,
@@ -80,7 +82,7 @@ export async function GET(request) {
       }, { status: 503 });
     }
     console.error('[ICS Subscriptions GET]', error);
-    return NextResponse.json({ error: error?.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -95,10 +97,13 @@ export async function POST(request) {
     }
 
     const body = await request.json().catch(() => ({}));
+    const personal = body.personal === true;
+    const ownerEmpNo = personal ? String(body.ownerEmpNo || '').trim() : null;
     const depts = normalizeIcalDeptList(body.depts || []);
     const label = String(body.label || '').trim();
 
-    if (depts.length === 0) {
+    if (personal && !ownerEmpNo) return NextResponse.json({ error: '개인용 링크 대상 직원을 선택해주세요.' }, { status: 400 });
+    if (depts.length === 0 && !personal) {
       return NextResponse.json({ error: '부서를 하나 이상 선택해주세요.' }, { status: 400 });
     }
 
@@ -106,7 +111,7 @@ export async function POST(request) {
       depts,
       label: label || '비공개 iCal 구독',
       createdBy: session.userId || null,
-      scope: 'leave-calendar',
+      scope: personal ? 'employee-current-dept' : 'leave-calendar',
     });
 
     await createIcalSubscriptionRecord({
@@ -114,7 +119,8 @@ export async function POST(request) {
       label: label || '비공개 iCal 구독',
       depts,
       createdBy: session.userId || null,
-      scope: 'leave-calendar',
+      ownerEmpNo,
+      scope: personal ? 'employee-current-dept' : 'leave-calendar',
     });
 
     const baseUrl = getPublicBaseUrl(request);
@@ -136,6 +142,6 @@ export async function POST(request) {
       }, { status: 503 });
     }
     console.error('[ICS Subscriptions POST]', error);
-    return NextResponse.json({ error: error?.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(error) }, { status: 500 });
   }
 }

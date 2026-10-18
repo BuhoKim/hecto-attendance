@@ -361,7 +361,7 @@ export default function MyPage() {
                         </div>
                         <div>
                           <div className="form-label">{pageCopy.deptLabel}</div>
-                          <select className="ui-select" value={profileDraft.dept} onChange={(e) => setProfileDraft((prev) => ({ ...prev, dept: e.target.value }))}>
+                          <select className="ui-select" value={profileDraft.dept} disabled={!profile?.isAdmin} title={!profile?.isAdmin ? '소속 변경은 관리자에게 요청해 주세요.' : undefined} onChange={(e) => setProfileDraft((prev) => ({ ...prev, dept: e.target.value }))}>
                             <option value="">{pageCopy.selectPrompt}</option>
                             {deptOptions.map((dept) => (
                               <option key={dept} value={dept}>

@@ -1,3 +1,14 @@
+function getNextCalendarDay(dateStr) {
+  if (!dateStr) return '';
+  const clean = dateStr.length === 8 && !dateStr.includes('-')
+    ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+    : String(dateStr).slice(0, 10);
+  const [y, m, d] = clean.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
 /**
  * ================================================================
  * 네이버웍스(NAVER WORKS) API 연동 모듈 (ESM - Next.js App 라우트용)
@@ -98,7 +109,7 @@ export async function getAccessToken() {
     assertion: jwt,
     client_id: cfg.clientId,
     client_secret: cfg.clientSecret,
-    scope: 'directory',
+    scope: 'calendar directory',
   });
 
   const res = await fetch('https://auth.worksmobile.com/oauth2/v2.0/token', {
@@ -343,4 +354,283 @@ export async function syncLeavesToNaverWorks(leavesWithEmails = []) {
   }
 
   return { success: errors === 0, processed, skipped, errors };
+}
+
+
+/**
+ * ================================================================
+ * 네이버웍스 부서별 공유 캘린더 API 연동
+ * ================================================================
+ */
+
+/**
+ * 캘린더 생성
+ */
+export async function createNaverCalendar({ calendarName, description, members = [] }) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('네이버웍스 인증 토큰이 설정되지 않았습니다.');
+
+  const res = await fetch('https://www.worksapis.com/v1.0/calendars', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      calendarName,
+      description: description || `${calendarName} 공유 캘린더`,
+      isPublic: false,
+      members,
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`[NaverWorks Calendar Create Error ${res.status}] ${errText}`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * 캘린더 공유 속성(이름, 설명, 멤버) 수정
+ */
+export async function updateNaverCalendar(calendarId, { calendarName, description, members }) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('네이버웍스 인증 토큰이 설정되지 않았습니다.');
+
+  const body = {};
+  if (calendarName) body.calendarName = calendarName;
+  if (description !== undefined) body.description = description;
+  if (members) body.members = members;
+
+  const res = await fetch(`https://www.worksapis.com/v1.0/calendars/${encodeURIComponent(calendarId)}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`[NaverWorks Calendar Update Error ${res.status}] ${errText}`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * 캘린더 상세 정보 조회
+ */
+export async function getNaverCalendar(calendarId) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('네이버웍스 인증 토큰이 설정되지 않았습니다.');
+
+  const res = await fetch(`https://www.worksapis.com/v1.0/calendars/${encodeURIComponent(calendarId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`[NaverWorks Calendar Get Error ${res.status}] ${errText}`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * 캘린더 삭제
+ */
+export async function deleteNaverCalendar(calendarId) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('네이버웍스 인증 토큰이 설정되지 않았습니다.');
+
+  const res = await fetch(`https://www.worksapis.com/v1.0/calendars/${encodeURIComponent(calendarId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok && res.status !== 404) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`[NaverWorks Calendar Delete Error ${res.status}] ${errText}`);
+  }
+
+  return true;
+}
+
+/**
+ * 부서 캘린더 일정 동기화 (기존 등록 일정 중복 방지 및 신규 등록)
+ */
+export async function syncDepartmentCalendarEvents({
+  calendarId,
+  dept,
+  excludedEmpNos = [],
+  supabase,
+}) {
+  const token = await getAccessToken();
+  if (!token) throw new Error('네이버웍스 인증 토큰이 설정되지 않았습니다.');
+
+  const cfg = getEnvConfig();
+  const serviceAccount = cfg.serviceAccount;
+
+  // 1. 해당 부서의 활성 직원 목록 조회
+  const { data: emps, error: empErr } = await supabase
+    .from('sa_employees')
+    .select('emp_no, name, dept, status, is_active')
+    .eq('dept', dept);
+
+  if (empErr) throw new Error(`직원 목록 조회 실패: ${empErr.message}`);
+
+  const excludedSet = new Set((excludedEmpNos || []).map((no) => String(no).trim()));
+  const activeEmps = (emps || []).filter((e) => {
+    if (!e || e.is_active === false || e.status === 'resigned') return false;
+    const empNo = String(e.emp_no || '').trim();
+    return empNo && !excludedSet.has(empNo);
+  });
+
+  const empMap = new Map(activeEmps.map((e) => [String(e.emp_no), e]));
+  const validEmpNos = activeEmps.map((e) => String(e.emp_no));
+
+  if (validEmpNos.length === 0) {
+    return { success: true, processed: 0, created: 0, skipped: 0 };
+  }
+
+  // 2. 해당 직원들의 승인된 휴가(status = '40') 조회 (최근 60일 전부터 향후 180일까지)
+  const now = new Date();
+  const past = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const future = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000);
+  const fromStr = past.toISOString().slice(0, 10).replace(/-/g, '');
+  const toStr = future.toISOString().slice(0, 10).replace(/-/g, '');
+
+  const { data: leaves, error: leaveErr } = await supabase
+    .from('sa_leaves')
+    .select('*')
+    .in('emp_no', validEmpNos)
+    .eq('status', '40')
+    .gte('end_date', fromStr)
+    .lte('start_date', toStr);
+
+  if (leaveErr) throw new Error(`휴가 목록 조회 실패: ${leaveErr.message}`);
+
+  // 3. 네이버웍스 캘린더에서 최근 30일 전부터 향후 30일까지 기존 일정 조회
+  const calFrom = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000).toISOString();
+  const calUntil = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
+  let existingEventKeys = new Set();
+  try {
+    const listRes = await fetch(
+      `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events?fromDateTime=${encodeURIComponent(calFrom)}&untilDateTime=${encodeURIComponent(calUntil)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (listRes.ok) {
+      const listData = await listRes.json();
+      for (const ev of listData.events || []) {
+        for (const comp of ev.eventComponents || []) {
+          // [KEY: ...] 파싱 또는 summary와 날짜 매칭
+          const match = comp.description?.match(/\[KEY:\s*([^\]]+)\]/);
+          if (match) {
+            existingEventKeys.add(match[1].trim());
+          } else if (comp.summary && comp.start?.date) {
+            existingEventKeys.add(`${comp.summary}_${comp.start.date}`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[NaverWorks Event Query Warning]', err.message);
+  }
+
+  // 4. 새 일정 등록
+  let created = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const leave of leaves || []) {
+    const emp = empMap.get(String(leave.emp_no));
+    if (!emp) continue;
+
+    const startDate = leave.start_date?.length === 8
+      ? `${leave.start_date.slice(0, 4)}-${leave.start_date.slice(4, 6)}-${leave.start_date.slice(6, 8)}`
+      : String(leave.start_date || '').slice(0, 10);
+    const endDate = leave.end_date?.length === 8
+      ? `${leave.end_date.slice(0, 4)}-${leave.end_date.slice(4, 6)}-${leave.end_date.slice(6, 8)}`
+      : String(leave.end_date || leave.start_date || '').slice(0, 10);
+
+    const leaveKey = `${leave.emp_no}_${startDate}_${leave.leave_code}`;
+    if (existingEventKeys.has(leaveKey)) {
+      skipped++;
+      continue;
+    }
+
+    const empName = leave.emp_name || emp.name;
+    const leaveLabel = leave.leave_name || '연차';
+    const summary = `${empName} · ${leaveLabel}`;
+
+    if (existingEventKeys.has(`${summary}_${startDate}`)) {
+      skipped++;
+      continue;
+    }
+
+    const description = [
+      `이름: ${empName}`,
+      `부서: ${dept}`,
+      `휴가종류: ${leaveLabel}`,
+      `기간: ${startDate} ~ ${endDate}`,
+      `일수: ${leave.leave_days || 1}일`,
+      `[KEY: ${leaveKey}]`,
+    ].join('\n');
+
+    const eventPayload = {
+      eventComponents: [
+        {
+          summary,
+          description,
+          start: { date: startDate },
+          end: { date: getNextCalendarDay(endDate) },
+          transparency: 'TRANSPARENT',
+          visibility: 'PUBLIC',
+        },
+      ],
+      sendNotification: false,
+    };
+
+    try {
+      const postRes = await fetch(
+        `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(eventPayload),
+        }
+      );
+
+      if (postRes.ok) {
+        created++;
+        existingEventKeys.add(leaveKey);
+      } else {
+        failed++;
+        const errText = await postRes.text().catch(() => '');
+        console.error(`[Event Sync Failed] ${summary}:`, postRes.status, errText.slice(0, 100));
+      }
+    } catch (postErr) {
+      failed++;
+      console.error(`[Event Sync Error] ${summary}:`, postErr.message);
+    }
+
+    // Rate limiting protection
+    await new Promise((r) => setTimeout(r, 60));
+  }
+
+  return {
+    success: true,
+    totalLeaves: (leaves || []).length,
+    created,
+    skipped,
+    failed,
+  };
 }

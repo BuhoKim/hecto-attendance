@@ -1,4 +1,4 @@
-const DEFAULT_LINE_LENGTH = 70;
+const DEFAULT_LINE_LENGTH = 75;
 
 export const MANAGEMENT_DEPTS = ['경영지원실', '경영지원팀'];
 
@@ -46,13 +46,24 @@ export const addDaysToDateStr = (dateStr, days) => {
 
 export const foldICSLine = (line = '', maxLength = DEFAULT_LINE_LENGTH) => {
   const text = String(line || '');
-  if (text.length <= maxLength) return text;
-
+  // RFC 5545 counts UTF-8 octets, including the continuation space.
+  // Iterate code points so a fold never splits a Korean character or emoji.
+  const encoder = new TextEncoder();
   const chunks = [];
-  for (let i = 0; i < text.length; i += maxLength) {
-    chunks.push(text.slice(i, i + maxLength));
+  let chunk = '';
+  let bytes = 0;
+  for (const character of text) {
+    const size = encoder.encode(character).length;
+    if (bytes + size > maxLength && chunk) {
+      chunks.push(chunk);
+      chunk = ' ';
+      bytes = 1;
+    }
+    chunk += character;
+    bytes += size;
   }
-  return chunks.join('\r\n ');
+  chunks.push(chunk);
+  return chunks.join('\r\n');
 };
 
 export const buildICS = ({ calendarName, calendarDescription, events = [] }) => {

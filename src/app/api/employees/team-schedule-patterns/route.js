@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import {
   deleteTeamSchedulePattern,
@@ -38,7 +39,7 @@ export async function GET(request) {
     return NextResponse.json({ success: true, patterns: rows });
   } catch (error) {
     console.error('[Team Schedule GET]', error);
-    return NextResponse.json({ success: false, error: error.message || '조회 중 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ success: false, error: publicErrorMessage(error, '조회 중 오류가 발생했습니다.') }, { status: 500 });
   }
 }
 
@@ -93,7 +94,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('[Team Schedule POST]', error);
     const status = error?.code === 'MISSING_TEAM_SCHEDULE_TABLE' ? 503 : 500;
-    return NextResponse.json({ success: false, error: error.message || '팀 스케줄 저장 중 오류가 발생했습니다.' }, { status });
+    return NextResponse.json({ success: false, error: publicErrorMessage(error, '팀 스케줄 저장 중 오류가 발생했습니다.') }, { status });
   }
 }
 
@@ -123,6 +124,6 @@ export async function DELETE(request) {
   } catch (error) {
     console.error('[Team Schedule DELETE]', error);
     const status = error?.code === 'MISSING_TEAM_SCHEDULE_TABLE' ? 503 : 500;
-    return NextResponse.json({ success: false, error: error.message || '팀 스케줄 삭제 중 오류가 발생했습니다.' }, { status });
+    return NextResponse.json({ success: false, error: publicErrorMessage(error, '팀 스케줄 삭제 중 오류가 발생했습니다.') }, { status });
   }
 }

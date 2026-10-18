@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { buildLeaveIcsForDepartments } from '@/lib/icalFeed';
 import { getIcalSubscriptionRecordByToken } from '@/lib/icalSubscriptions';
 import { buildIcalHeaders } from '@/lib/icalHttp';
@@ -20,6 +21,8 @@ export async function GET(_request, context) {
 
     const ics = await buildLeaveIcsForDepartments({
       departments: Array.isArray(record.depts) && record.depts.length > 0 ? record.depts : [],
+      subscriptionOwnerId: record.scope === 'leader-current-dept' ? record.created_by : null,
+      subscriptionOwnerEmpNo: record.scope === 'employee-current-dept' ? record.owner_emp_no : null,
       calendarName: record.label || '비공개 iCal 구독',
       calendarDescription: `${record.label || '비공개 iCal 구독'} - 비공개 부서 연차 구독`,
     });
@@ -31,6 +34,6 @@ export async function GET(_request, context) {
     });
   } catch (error) {
     console.error('[ICS Subscriptions GET ICS]', error);
-    return NextResponse.json({ error: error?.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(error) }, { status: 500 });
   }
 }

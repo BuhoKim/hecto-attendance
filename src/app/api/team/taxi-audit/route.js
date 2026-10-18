@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
 import { isLeaderPosition } from '@/lib/roleUtils';
@@ -47,7 +48,7 @@ export async function GET(request) {
   } catch (error) {
     console.error('[Team Taxi Audit Catch]', error);
     return NextResponse.json(
-      { error: String(error?.message || error || '팀원 소명 내역을 불러오지 못했습니다.') },
+      { error: publicErrorMessage(error, '팀원 소명 내역을 불러오지 못했습니다.') },
       { status: 500 }
     );
   }

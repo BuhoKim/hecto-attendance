@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --test",
     "check:kakao-taxi": "node scripts/check_kakao_taxi_api.mjs",
     "inspect_yuncha_master": "node scratch/inspect_yuncha_master.js",
     "inspect:yuncha-master": "node scratch/inspect_yuncha_master.js",
@@ -23,20 +24,26 @@
     "@supabase/supabase-js": "^2.106.2",
     "better-sqlite3": "^12.10.0",
     "date-holidays": "^3.30.2",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.16.0",
     "mysql2": "^3.22.3",
-    "next": "16.2.6",
-    "nodemailer": "^9.0.0",
+    "next": "^16.3.0",
+    "nodemailer": "^9.0.5",
     "pg": "^8.21.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "web-push": "^3.6.7",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.0",
     "tailwindcss": "^4"
+  },
+  "overrides": {
+    "js-yaml": "5.2.3"
   }
 }

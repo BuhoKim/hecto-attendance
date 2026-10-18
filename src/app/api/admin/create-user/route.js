@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseClient';
-import { isAdminRole } from '@/lib/roleUtils';
+import { verifySession } from '@/lib/auth';
 
 const COMPANY_CODE = '1600';
 
@@ -26,26 +26,14 @@ function normalizeEmpNo(value) {
 // Admin API for creating employee accounts
 export async function POST(request) {
   try {
-    const accessToken = request.cookies.get('sb-access-token')?.value;
-    if (!accessToken) {
+    const session = await verifySession(request);
+    if (!session) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
     }
 
     const supabase = getAdminClient();
 
-    // Admin permission check
-    const { data: userData } = await supabase.auth.getUser(accessToken);
-    if (!userData?.user) {
-      return NextResponse.json({ error: '세션이 만료되었습니다.' }, { status: 401 });
-    }
-
-    const { data: profile } = await supabase
-      .from('sa_profiles')
-      .select('is_admin, position, rank')
-      .eq('id', userData.user.id)
-      .single();
-
-    if (!isAdminRole(profile || {})) {
+    if (!session.isAdmin) {
       return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 403 });
     }
 
@@ -134,7 +122,7 @@ export async function POST(request) {
       .upsert({
         emp_no: normalizedEmpNo,
         status: 'pending',
-        requested_by: userData.user.id,
+        requested_by: session.userId,
         requested_at: new Date().toISOString(),
         processed_at: null,
         last_error: null,

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
 
@@ -21,18 +22,32 @@ export async function GET(request) {
 
     const supabase = getAdminClient();
 
-    let query = supabase.from('sa_taxi_explanations').select('*');
+    let data = null;
+    let error = null;
     if (orderId) {
-      query = query.or(`order_id.eq.${orderId},ticket_no.eq.${orderId}`);
+      ({ data, error } = await supabase
+        .from('sa_taxi_explanations')
+        .select('*')
+        .eq('order_id', orderId)
+        .maybeSingle());
+      if (!error && !data) {
+        ({ data, error } = await supabase
+          .from('sa_taxi_explanations')
+          .select('*')
+          .eq('ticket_no', orderId)
+          .maybeSingle());
+      }
     } else {
-      query = query.eq('token', token);
+      ({ data, error } = await supabase
+        .from('sa_taxi_explanations')
+        .select('*')
+        .eq('token', token)
+        .maybeSingle());
     }
-
-    const { data, error } = await query.maybeSingle();
 
     if (error) {
       console.error('[Taxi Audit Explanation Detail Error]', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: publicErrorMessage(error, '소명 정보를 불러오지 못했습니다.') }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -42,7 +57,7 @@ export async function GET(request) {
   } catch (error) {
     console.error('[Taxi Audit Explanation Detail Catch]', error);
     return NextResponse.json(
-      { error: String(error?.message || error || '소명 정보를 불러오지 못했습니다.') },
+      { error: publicErrorMessage(error, '소명 정보를 불러오지 못했습니다.') },
       { status: 500 }
     );
   }

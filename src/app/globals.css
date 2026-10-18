@@ -1,8 +1,6 @@
 /* ─────────────────────────────────────────────────────────────
    HECTO 근태관리 대시보드 · Design System
    ───────────────────────────────────────────────────────────── */
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
-
 :root {
   /* Brand (fixed across themes) */
   --blue:   #5B88D6;
@@ -36,8 +34,8 @@
   --shadow-card:    0 10px 28px rgba(0,0,0,0.18);
 
   /* Font */
-  --font: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'Fira Mono', monospace;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 
   /* Radius */
   --r-sm: 8px;
@@ -2823,6 +2821,72 @@ button:not(.icon-btn):not(.tab-btn):not(.sidebar-util-btn):not(.tracker-day-cell
   padding-bottom: 10px;
   box-shadow: inset 0 -1px 0 var(--border-row);
   vertical-align: middle;
+}
+
+.table-wrapper .attendance-export-table {
+  min-width: 920px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table-wrapper .attendance-export-table thead th,
+.table-wrapper .attendance-export-table tbody td {
+  text-align: center;
+}
+
+.table-wrapper .attendance-export-table thead th {
+  padding: 13px 14px;
+  background: linear-gradient(180deg, rgba(91, 136, 214, 0.18), rgba(91, 136, 214, 0.08)), var(--bg-card-2);
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  border-bottom: 1px solid rgba(91, 136, 214, 0.28);
+}
+
+.table-wrapper .attendance-export-table tbody td {
+  padding: 13px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.18s ease;
+}
+
+.table-wrapper .attendance-export-table tbody tr:hover td {
+  background: rgba(91, 136, 214, 0.08);
+}
+
+.table-wrapper .attendance-export-table tbody tr.attendance-export-row--late td {
+  background: rgba(245, 190, 66, 0.13);
+}
+
+.table-wrapper .attendance-export-table tbody tr.attendance-export-row--late:hover td {
+  background: rgba(245, 190, 66, 0.21);
+}
+
+.attendance-export-name {
+  font-weight: 800 !important;
+  color: var(--text-1);
+}
+
+.attendance-export-status {
+  display: inline-flex;
+  min-width: 48px;
+  justify-content: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.attendance-export-status--normal {
+  color: var(--green);
+  background: rgba(95, 169, 113, 0.14);
+}
+
+.attendance-export-status--late {
+  color: #8a5a00;
+  background: rgba(255, 224, 138, 0.72);
 }
 
 table {

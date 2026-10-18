@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { saveScheduleOverridesBatch } from '@/lib/supabaseDb';
 import { isAdminRole, isLeaderPosition } from '@/lib/roleUtils';
@@ -51,6 +52,6 @@ export async function POST(request) {
     });
   } catch (err) {
     console.error('[Schedule Override Batch API]', err);
-    return NextResponse.json({ error: err.message || '근무일정 저장 중 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err, '근무일정 저장 중 오류가 발생했습니다.') }, { status: 500 });
   }
 }

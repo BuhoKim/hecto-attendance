@@ -4,8 +4,7 @@ import {
   Calendar,
   Users,
   CheckCircle,
-  Plus,
-  Upload,
+  Download,
   Clock,
   CarTaxiFront,
   LogOut,
@@ -35,10 +34,11 @@ const LEADER_ITEMS = [
 const OVERTIME_ITEM = { href: '/?tab=OVERTIME', label: '초과근무 관리', icon: Clock, iconStyle: { color: 'var(--amber)' }, category: '부서' };
 
 const ADMIN_ITEMS = [
-  { href: '/?tab=USER_REGISTER', label: '신규 계정 등록', icon: Plus, iconStyle: { color: 'var(--green)' }, category: '관리자' },
-  { href: '/?tab=CAPS_UPLOAD', label: '캡스 업로드', icon: Upload, iconStyle: { color: 'var(--blue)' }, category: '관리자' },
+  { href: '/?tab=ATTENDANCE_EXPORT', label: '근태기록 저장', icon: Download, iconStyle: { color: 'var(--green)' }, category: '관리자' },
   { href: '/admin/taxi-audit', label: '택시 소명관리', icon: CarTaxiFront, iconStyle: { color: 'var(--pink)' }, activeHref: '/admin/taxi-audit', category: '관리자' },
   { href: '/admin/employees', label: '직원 관리', icon: Users, iconStyle: { color: 'var(--indigo)' }, activeHref: '/admin/employees', category: '관리자' },
+  { href: '/admin/terminal-attendance', label: '석식 출입 조회', icon: Clock, iconStyle: { color: 'var(--cyan)' }, activeHref: '/admin/terminal-attendance', category: '관리자' },
+  { href: '/admin/naver-calendars', label: '네이버웍스 캘린더', icon: CalendarDays, iconStyle: { color: 'var(--green)' }, activeHref: '/admin/naver-calendars', category: '관리자' },
 ];
 
 function canSeeLeaderItems({ isAdmin, isLeader, position }) {

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
 import { parseCapsAttendanceFile } from '@/lib/capsAttendance';
@@ -81,7 +82,7 @@ export async function POST(request) {
       }
 
       if (error) {
-        batchErrors.push(error.message || '알 수 없는 오류');
+        batchErrors.push(publicErrorMessage(error, '출퇴근 기록 저장에 실패했습니다.'));
         continue;
       }
 

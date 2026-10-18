@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { fetchAttendanceLogs } from './supabaseDb';
 import { shiftKstDateKey } from './kstDate';
 import { normalizeEmpNoKey } from './dashboardUtils';
+import { isExcludedTaxiOrderStatus, normalizeTaxiOrderStatus } from './kakaoTaxiStatus';
 
 const DEFAULT_BASE_URL = process.env.KAKAO_T_BIZ_API_BASE_URL || 'https://b2b-api.kakaomobility.com';
 const EARLY_MORNING_CUTOFF = 6 * 60;
@@ -159,6 +160,13 @@ const getOrderAmount = (order = {}) => {
   return Number.isFinite(fallback) ? fallback : 0;
 };
 
+const getOrderStatus = (order = {}, paymentItems = []) => {
+  const orderStatus = order.status || order.order_status || order.payment_status;
+  if (orderStatus) return String(orderStatus).trim();
+  const itemStatuses = paymentItems.map((item) => String(item?.status || '').trim()).filter(Boolean);
+  return itemStatuses[0] || '';
+};
+
 const buildActualCheckoutLookup = (logs = []) => {
   const grouped = new Map();
 
@@ -306,6 +314,7 @@ export async function buildTaxiAuditRowsFromKakao({
       const amount = getOrderAmount(order);
       const paymentItems = Array.isArray(order.payment_items) ? order.payment_items : [];
       const paidItem = paymentItems.find((item) => String(item?.status || '').toLowerCase() === 'paid') || paymentItems[0] || null;
+      const orderStatus = getOrderStatus(order, paymentItems);
 
       return {
         id: String(order.id || `${index}`),
@@ -314,13 +323,14 @@ export async function buildTaxiAuditRowsFromKakao({
         rideTimeRaw,
         rideTime: formatDateTime(rideTimeRaw),
         callTime: formatDateTime(String(order.call_time || '').trim()),
+        arrivalTime: formatDateTime(String(order.arrival_time || order.dropoff_time || order.completed_time || order.end_time || '').trim()),
         rideDate,
         employeeName: memberNameValue,
         dept: String(order.member_department || '').trim(),
         reason: String(order.use_code || order.vertical_product_name || '택시 이용').trim(),
         amount: String(amount),
         settleAmount: String(amount),
-        status: String(paidItem?.status || order.payment_items?.[0]?.status || '').trim(),
+        status: orderStatus,
         pickup: String(order.departure_point || '').trim(),
         dropoff: String(order.arrival_point || '').trim(),
         memberIdentifier: memberIdentifierValue,
@@ -343,6 +353,8 @@ export async function buildTaxiAuditRowsFromKakao({
       };
     })
     .filter((row) => row.isLateNightRide);
+
+  const excludedRows = normalizedOrders.filter((row) => isExcludedTaxiOrderStatus(row.status));
 
   const months = new Set();
   normalizedOrders.forEach((row) => {
@@ -400,6 +412,7 @@ export async function buildTaxiAuditRowsFromKakao({
   }
 
   const rows = normalizedOrders
+    .filter((row) => !isExcludedTaxiOrderStatus(row.status))
     .map((row) => {
       const normalizedIdentifier = normalizeEmpNoKey(row.memberIdentifier);
       const directEmp = normalizedIdentifier ? employeeByEmpNo.get(normalizedIdentifier) : null;
@@ -444,6 +457,8 @@ export async function buildTaxiAuditRowsFromKakao({
     meta: {
       queriedMonths: [...months].filter(Boolean),
       matchedRows: rows.length,
+      excludedRows: excludedRows.length,
+      excludedAmount: excludedRows.reduce((sum, row) => sum + Number(row.amount || 0), 0),
       source: 'kakao',
     },
   };
@@ -473,6 +488,7 @@ export async function fetchKakaoTaxiReportData({
 
     const paymentItems = Array.isArray(order.payment_items) ? order.payment_items : [];
     const paidItem = paymentItems.find((item) => String(item?.status || '').toLowerCase() === 'paid') || paymentItems[0] || null;
+    const orderStatus = getOrderStatus(order, paymentItems);
 
     const extraFeeFromItems = paymentItems
       .filter((item) => {
@@ -490,6 +506,7 @@ export async function fetchKakaoTaxiReportData({
       rideTimeRaw,
       rideTime: formatDateTime(rideTimeRaw),
       callTime: formatDateTime(String(order.call_time || '').trim()),
+      arrivalTime: formatDateTime(String(order.arrival_time || order.dropoff_time || order.completed_time || order.end_time || '').trim()),
       rideDate,
       employeeName: String(order.member_name || '').trim(),
       dept: String(order.member_department || '').trim() || '미지정',
@@ -497,7 +514,7 @@ export async function fetchKakaoTaxiReportData({
       amount,
       platformFee: totalExtraFee,
       hasExtraFee: totalExtraFee > 0,
-      status: String(paidItem?.status || order.payment_items?.[0]?.status || '').trim(),
+      status: orderStatus,
       pickup: String(order.departure_point || '').trim(),
       dropoff: String(order.arrival_point || '').trim(),
       memberIdentifier: String(order.member_identifier || '').trim(),
@@ -507,6 +524,18 @@ export async function fetchKakaoTaxiReportData({
       rawOrder: order,
     };
   });
+
+  const excludedRows = rawNormalized.filter((row) => isExcludedTaxiOrderStatus(row.status));
+  const excludedStatusMap = new Map();
+  excludedRows.forEach((row) => {
+    const status = normalizeTaxiOrderStatus(row.status) || 'unknown';
+    const current = excludedStatusMap.get(status) || { status, count: 0, amount: 0 };
+    current.count += 1;
+    current.amount += row.amount;
+    excludedStatusMap.set(status, current);
+  });
+  const excludedStatusStats = [...excludedStatusMap.values()].sort((a, b) => b.amount - a.amount || b.count - a.count);
+  const activeRawRows = rawNormalized.filter((row) => !isExcludedTaxiOrderStatus(row.status));
 
   const employeeByEmpNo = new Map();
   const employeesByName = new Map();
@@ -527,7 +556,7 @@ export async function fetchKakaoTaxiReportData({
 
   const normalizeDeptKey = (val = '') => String(val || '').replace(/\s+/g, '').trim().toLowerCase();
 
-  const allEnrichedRows = rawNormalized.map((row) => {
+  const allEnrichedRows = activeRawRows.map((row) => {
     const normalizedIdentifier = normalizeEmpNoKey(row.memberIdentifier);
     const directEmp = normalizedIdentifier ? employeeByEmpNo.get(normalizedIdentifier) : null;
     const nameMatchedEmp = employeesByName.get(normalizeName(row.employeeName));
@@ -699,6 +728,11 @@ export async function fetchKakaoTaxiReportData({
     deptStats,
     timeWindowStats,
     extraFeeStats,
+    excludedStatusStats,
+    excludedSummary: {
+      totalCount: excludedRows.length,
+      totalAmount: excludedRows.reduce((sum, row) => sum + row.amount, 0),
+    },
     reasonStats,
     dailyStats,
     availableDepts,
@@ -706,4 +740,3 @@ export async function fetchKakaoTaxiReportData({
     count,
   };
 }
-

@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
-import { saveEmployeeOvertimeRound, fetchAttendanceLogs } from '@/lib/supabaseDb';
+import { saveEmployeeOvertimeRound } from '@/lib/supabaseDb';
+import { getAdminClient } from '@/lib/supabaseClient';
+import { normalizeDeptLoose } from '@/lib/dashboardUtils';
 import { isAdminRole, isLeaderPosition, isExecutivePosition } from '@/lib/roleUtils';
 
 export async function POST(request) {
@@ -19,7 +22,7 @@ export async function POST(request) {
       return NextResponse.json({ error: '초과근무 관리 권한이 없습니다.' }, { status: 403 });
     }
 
-    const { empNo, roundName, startDate, endDate, employeeDept } = await request.json();
+    const { empNo, roundName, startDate, endDate } = await request.json();
     if (!empNo || !roundName || !startDate || !endDate) {
       return NextResponse.json({ error: '필수 데이터가 누락되었습니다.' }, { status: 400 });
     }
@@ -27,8 +30,14 @@ export async function POST(request) {
     // Security check: team leaders can only modify employees in their own department
     const isOnlyTeamLeader = isLeader && !isExecutive && !isAdmin;
     if (isOnlyTeamLeader) {
-      const leaderDept = String(session.team || session.dept || '').trim();
-      const targetDept = String(employeeDept || '').trim();
+      const { data: employee, error } = await getAdminClient()
+        .from('sa_employees')
+        .select('dept,is_active')
+        .eq('emp_no', empNo)
+        .maybeSingle();
+      if (error) throw error;
+      const leaderDept = normalizeDeptLoose(session.team || session.dept);
+      const targetDept = employee?.is_active === true ? normalizeDeptLoose(employee.dept) : '';
       if (!leaderDept || leaderDept !== targetDept) {
         return NextResponse.json({ error: '본인 부서의 직원 정보만 수정할 수 있습니다.' }, { status: 403 });
       }
@@ -44,6 +53,6 @@ export async function POST(request) {
     return NextResponse.json({ success: true, message: '직원 초과근무 설정이 저장되었습니다.' });
   } catch (err) {
     console.error('[Overtime Rounds POST API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }

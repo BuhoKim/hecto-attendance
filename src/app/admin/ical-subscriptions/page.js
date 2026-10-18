@@ -1,189 +1,82 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Copy, Link2, RefreshCw, Shield, Trash2, RotateCcw } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarDays, Check, ChevronDown, Copy, Link2, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import EmployeeAdminShell from '../employees/EmployeeAdminShell';
+import styles from './subscriptions.module.css';
 
 const DEFAULT_DEPTS = ['경영지원실', '경영지원팀'];
 
-function formatDateTime(value) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+function Action({ children, primary, danger, ...props }) {
+  return <button type="button" className={`tab-btn ${styles.button} ${primary ? styles.primary : ''} ${danger ? styles.danger : ''}`} {...props}>{children}</button>;
 }
 
-function DeptChip({ dept, checked, onChange }) {
-  return (
-    <label
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        minHeight: 36,
-        padding: '7px 10px',
-        borderRadius: 12,
-        border: `1px solid ${checked ? 'var(--blue)' : 'var(--border)'}`,
-        background: checked ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-overlay-sm)',
-        color: 'var(--text-1)',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ width: 14, height: 14, margin: 0, accentColor: 'var(--blue)' }}
-      />
-      <span style={{ fontSize: 13, fontWeight: 700 }}>{dept}</span>
-    </label>
-  );
+function Departments({ departments, selected, onChange, disabled }) {
+  return <div className={styles.departments}>
+    {departments.map(dept => <label key={dept} className={styles.department} data-checked={selected.includes(dept)}>
+      <input type="checkbox" checked={selected.includes(dept)} disabled={disabled}
+        onChange={e => onChange(e.target.checked ? [...selected, dept] : selected.filter(value => value !== dept))} />
+      {dept}
+    </label>)}
+  </div>;
 }
 
-function SubscriptionCard({ item, onCopyUrl, onCopyWebcal, onToggleActive, onDelete }) {
-  const [open, setOpen] = useState(false);
-  const active = item.isActive;
-
-  return (
-    <div
-      className="card"
-      style={{
-        padding: 10,
-        borderRadius: 14,
-        borderColor: active ? 'var(--border)' : 'rgba(148, 163, 184, 0.32)',
-        background: active ? 'var(--bg-card)' : 'rgba(148, 163, 184, 0.05)',
-        opacity: active ? 1 : 0.82,
-      }}
-    >
-      <div style={{ display: 'grid', gap: 8 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 10,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ minWidth: 0, display: 'grid', gap: 5 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-1)' }}>{item.label}</div>
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  padding: '3px 8px',
-                  borderRadius: 999,
-                  background: active ? 'rgba(59, 130, 246, 0.12)' : 'rgba(148, 163, 184, 0.14)',
-                  color: active ? 'var(--blue)' : 'var(--text-2)',
-                }}
-              >
-                {active ? '활성' : '비활성'}
-              </span>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
-              생성 {formatDateTime(item.createdAt)}
-              {item.revokedAt ? ` · 변경 ${formatDateTime(item.revokedAt)}` : ''}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button type="button" className="tab-btn" onClick={onCopyUrl} style={{ padding: '6px 10px' }}>
-              <Copy size={14} /> URL
-            </button>
-            <button type="button" className="tab-btn" onClick={onCopyWebcal} style={{ padding: '6px 10px' }}>
-              <Copy size={14} /> webcal
-            </button>
-            <button
-              type="button"
-              className="tab-btn"
-              onClick={() => onToggleActive(active)}
-              style={{
-                padding: '6px 10px',
-                borderColor: active ? 'rgba(239, 68, 68, 0.32)' : 'rgba(34, 197, 94, 0.32)',
-                color: active ? 'var(--red)' : 'var(--green)',
-              }}
-            >
-              <RotateCcw size={14} />
-              {active ? '비활성' : '활성화'}
-            </button>
-            <button
-              type="button"
-              className="tab-btn"
-              onClick={onDelete}
-              style={{ padding: '6px 10px', borderColor: 'rgba(239, 68, 68, 0.32)', color: 'var(--red)' }}
-            >
-              <Trash2 size={14} /> 삭제
-            </button>
-            <button type="button" className="tab-btn" onClick={() => setOpen((v) => !v)} style={{ padding: '6px 10px' }}>
-              <ChevronDown
-                size={14}
-                style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .15s ease' }}
-              />
-              {open ? '접기' : '상세'}
-            </button>
-          </div>
+function SubscriptionRow({ item, departments, employees, onCopyUrl, onCopyWebcal, onToggleActive, onDelete, onUpdateDepts }) {
+  const [panel, setPanel] = useState(null);
+  const [draft, setDraft] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState('');
+  const choices = [...new Set([...departments, ...(item.depts || [])])];
+  const owner = employees.find((employee) => String(employee.empNo) === String(item.ownerEmpNo));
+  const displayLabel = owner
+    ? `${owner.name} 개인용 캘린더`
+    : (item.label && item.label !== '캘린더 링크' ? item.label : ((item.depts || []).length === 1 ? `${item.depts[0]} 캘린더 링크` : item.label || '캘린더 링크'));
+  const save = async () => {
+    setSaving(true);
+    setFailure('');
+    try { await onUpdateDepts(draft); setPanel(null); }
+    catch (error) { setFailure(error.message); }
+    finally { setSaving(false); }
+  };
+  return <Fragment>
+    <tr className={styles.row} data-open={Boolean(panel)} data-active={item.isActive}>
+      <td><div className={styles.nameCell}><CalendarDays size={15} aria-hidden="true" /><span className={styles.name} title={displayLabel}>{displayLabel}</span></div></td>
+      <td><span className={styles.deptSummary} title={(item.depts || []).join(', ')}>{(item.depts || []).join(' · ') || '-'}</span></td>
+      <td><span className={styles.status} data-active={item.isActive}>{item.isActive ? '활성' : '비활성'}</span></td>
+      <td><div className={styles.actions}>
+        <Action onClick={onCopyUrl} title="구독 URL 복사"><Copy size={13} />복사</Action>
+        <Action aria-expanded={panel === 'edit'} disabled={saving} onClick={() => { setDraft(item.depts || []); setFailure(''); setPanel(panel === 'edit' ? null : 'edit'); }}><Pencil size={13} />편집</Action>
+        <Action aria-expanded={panel === 'detail'} disabled={saving} onClick={() => setPanel(panel === 'detail' ? null : 'detail')}><ChevronDown size={13} />상세</Action>
+      </div></td>
+    </tr>
+    {panel && <tr className={styles.expanded}><td colSpan={4}>
+      {panel === 'edit' ? <div className={styles.editor}>
+        <div className={styles.toolbar}><strong>부서 편집 <span className={styles.muted}>· {draft.length}개 선택</span></strong>
+          <div className={styles.actions}><Action disabled={saving} onClick={() => setPanel(null)}>취소</Action>
+            <Action primary disabled={saving || !draft.length} onClick={save}><Check size={13} />{saving ? '저장 중' : '저장'}</Action></div>
         </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {(item.depts || []).map((dept) => (
-            <span
-              key={`${item.id}-${dept}`}
-              style={{
-                fontSize: 11,
-                padding: '4px 8px',
-                borderRadius: 999,
-                background: 'var(--bg-overlay-sm)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-1)',
-              }}
-            >
-              {dept}
-            </span>
-          ))}
-        </div>
-
-        {open ? (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 8,
-              padding: 10,
-              borderRadius: 12,
-              background: 'var(--bg-overlay-sm)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            <div style={{ display: 'grid', gap: 4 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-2)' }}>URL</div>
-              <code style={{ wordBreak: 'break-all', color: 'var(--text-1)', fontSize: 12 }}>{item.url}</code>
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-2)' }}>webcal</div>
-              <code style={{ wordBreak: 'break-all', color: 'var(--text-1)', fontSize: 12 }}>{item.webcalUrl}</code>
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
+        <Departments departments={choices} selected={draft} onChange={setDraft} disabled={saving} />
+        {failure && <p role="alert" className={styles.error}>{failure}</p>}
+        <span className={styles.muted}>기존 링크가 유지되며 다음 캘린더 동기화에 반영됩니다.</span>
+      </div> : <div className={styles.details}>
+        {[[item.url, 'URL', onCopyUrl], [item.webcalUrl, 'webcal', onCopyWebcal]].map(([url, label, copy]) =>
+          <div className={styles.linkLine} key={label}><span>{label}</span><input aria-label={label} readOnly value={url || ''} onFocus={e => e.target.select()} /><Action onClick={copy} aria-label={label + ' 복사'}><Copy size={13} /></Action></div>)}
+        <div className={styles.toolbar}><span className={styles.muted}>생성 {item.createdAt ? new Date(item.createdAt).toLocaleDateString('ko-KR') : '-'}</span>
+          <div className={styles.actions}><Action onClick={() => onToggleActive(item.isActive)}>{item.isActive ? '비활성화' : '활성화'}</Action><Action danger onClick={onDelete}><Trash2 size={13} />삭제</Action></div></div>
+      </div>}
+    </td></tr>}
+  </Fragment>;
 }
 
 export default function IcalSubscriptionPage() {
   const [employees, setEmployees] = useState([]);
   const [selectedDepts, setSelectedDepts] = useState(DEFAULT_DEPTS);
+  const [personalLink, setPersonalLink] = useState(false);
+  const [personalOwnerEmpNo, setPersonalOwnerEmpNo] = useState('');
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const [subscriptions, setSubscriptions] = useState([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -202,14 +95,22 @@ export default function IcalSubscriptionPage() {
     ).sort((a, b) => a.localeCompare(b, 'ko'));
   }, [employees]);
 
-  const selectedCount = selectedDepts.length;
+  const effectiveSelectedDepts = useMemo(() => {
+    if (employeeDepartments.length === 0 || selectedDepts.length === 0) return selectedDepts;
+    const filtered = selectedDepts.filter((dept) => employeeDepartments.includes(dept));
+    return filtered.length > 0 ? filtered : employeeDepartments.slice(0, 2);
+  }, [employeeDepartments, selectedDepts]);
+
+  const selectedCount = effectiveSelectedDepts.length;
   const activeCount = subscriptions.filter((item) => item.isActive).length;
+  const selectedPersonalEmployee = employees.find((employee) => String(employee.empNo) === String(personalOwnerEmpNo));
+  const personalLabel = selectedPersonalEmployee ? `${selectedPersonalEmployee.name} 개인용 캘린더` : '개인용 캘린더';
 
   const autoLabel = useMemo(() => {
-    if (selectedDepts.length === 0) return '캘린더 링크';
-    if (selectedDepts.length === 1) return `${selectedDepts[0]} 캘린더 링크`;
-    return `${selectedDepts[0]} 외 ${selectedDepts.length - 1}개 부서 캘린더 링크`;
-  }, [selectedDepts]);
+    if (effectiveSelectedDepts.length === 0) return '캘린더 링크';
+    if (effectiveSelectedDepts.length === 1) return `${effectiveSelectedDepts[0]} 캘린더 링크`;
+    return `${effectiveSelectedDepts[0]} 외 ${effectiveSelectedDepts.length - 1}개 부서 캘린더 링크`;
+  }, [effectiveSelectedDepts]);
 
   useEffect(() => {
     let alive = true;
@@ -253,23 +154,6 @@ export default function IcalSubscriptionPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (employeeDepartments.length === 0) return;
-    setSelectedDepts((current) => {
-      if (current.length > 0) {
-        const next = current.filter((dept) => employeeDepartments.includes(dept));
-        return next.length > 0 ? next : employeeDepartments.slice(0, 2);
-      }
-      return employeeDepartments.slice(0, 2);
-    });
-  }, [employeeDepartments]);
-
-  const toggleDept = (dept, checked) => {
-    setSelectedDepts((current) => {
-      if (checked) return current.includes(dept) ? current : [...current, dept];
-      return current.filter((item) => item !== dept);
-    });
-  };
 
   const refreshSubscriptions = async () => {
     const res = await fetch('/api/ical/subscriptions', { credentials: 'include' });
@@ -280,7 +164,7 @@ export default function IcalSubscriptionPage() {
 
   const refreshSubscriptionsWithNotice = async () => {
     await refreshSubscriptions();
-    setReloadNotice('기존 목록을 새 형식으로 다시 표시했습니다.');
+    setReloadNotice('구독 목록을 새로고침했습니다.');
     if (reloadNoticeTimer.current) {
       window.clearTimeout(reloadNoticeTimer.current);
     }
@@ -301,8 +185,10 @@ export default function IcalSubscriptionPage() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          depts: selectedDepts,
-          label: autoLabel,
+          depts: effectiveSelectedDepts,
+          label: personalLink ? personalLabel : autoLabel,
+          personal: personalLink,
+          ownerEmpNo: personalOwnerEmpNo,
         }),
       });
       const json = await res.json();
@@ -310,7 +196,7 @@ export default function IcalSubscriptionPage() {
 
       setMessage('구독 링크를 생성했습니다.');
       await refreshSubscriptions();
-      await navigator.clipboard?.writeText?.(json.url);
+      setShowCreate(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -331,6 +217,26 @@ export default function IcalSubscriptionPage() {
       await refreshSubscriptions();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const updateSubscriptionDepartments = async (token, depts) => {
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch(`/api/ical/subscriptions/${encodeURIComponent(token)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ depts }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || '부서 범위 저장에 실패했습니다.');
+      await refreshSubscriptions();
+      setMessage('기존 캘린더 링크의 부서 범위를 변경했습니다.');
+    } catch (err) {
+      setError(err.message);
+      throw err;
     }
   };
 
@@ -365,155 +271,43 @@ export default function IcalSubscriptionPage() {
   };
 
   return (
-    <EmployeeAdminShell
-      title="캘린더 링크 생성"
-      subtitle="부서를 선택해 캘린더 구독 링크를 만들고, 목록에서 링크를 복사하거나 활성화/삭제를 관리합니다."
-      activeHref="/admin/ical-subscriptions"
-    >
-      <div style={{ display: 'grid', gap: 10 }}>
-        <div className="card" style={{ padding: 12, display: 'grid', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Shield style={{ width: 18, height: 18, color: 'var(--blue)' }} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-1)' }}>링크 생성</div>
-              <div style={{ fontSize: 12, color: 'var(--text-2)' }}>이름은 자동으로 지정되며, 선택한 부서원들의 연차 일정만 구독 URL에 노출됩니다.</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, alignItems: 'end' }}>
-            <div style={{ display: 'grid', gap: 6, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>
-                  부서 선택 {selectedCount > 0 ? `(${selectedCount})` : ''}
-                </span>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    className="tab-btn"
-                    onClick={() => setSelectedDepts(employeeDepartments)}
-                    style={{ padding: '5px 10px' }}
-                  >
-                    전체 선택
-                  </button>
-                  <button
-                    type="button"
-                    className="tab-btn"
-                    onClick={() => setSelectedDepts([])}
-                    style={{ padding: '5px 10px' }}
-                  >
-                    해제
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))',
-                  gap: 6,
-                  maxHeight: 118,
-                  overflow: 'auto',
-                  paddingRight: 2,
-                }}
-              >
-                {loadingEmployees ? (
-                  <div style={{ color: 'var(--text-2)', fontSize: 13 }}>직원 정보를 불러오는 중...</div>
-                ) : employeeDepartments.length === 0 ? (
-                  <div style={{ color: 'var(--text-2)', fontSize: 13 }}>선택할 부서가 없습니다.</div>
-                ) : (
-                  employeeDepartments.map((dept) => (
-                    <DeptChip
-                      key={dept}
-                      dept={dept}
-                      checked={selectedDepts.includes(dept)}
-                      onChange={(checked) => toggleDept(dept, checked)}
-                    />
-                  ))
-                )}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="login-btn"
-              onClick={createSubscription}
-              disabled={creating || selectedCount === 0}
-              style={{ marginTop: 0, minWidth: 92, background: 'linear-gradient(135deg, var(--blue), #2563eb)', color: '#fff' }}
-            >
-              {creating ? <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Link2 size={16} />}
-              생성
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
-              자동 이름: <strong style={{ color: 'var(--text-1)' }}>{autoLabel}</strong>
-            </div>
-            {message ? <div style={{ fontSize: 12, color: 'var(--green)' }}>{message}</div> : null}
-            {error ? <div style={{ fontSize: 12, color: 'var(--red)' }}>{error}</div> : null}
-            {reloadNotice ? (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--blue)',
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  background: 'rgba(59, 130, 246, 0.1)',
-                }}
-              >
-                {reloadNotice}
-              </div>
-            ) : null}
-            {copyNotice ? (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--blue)',
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  background: 'rgba(59, 130, 246, 0.1)',
-                }}
-              >
-                {copyNotice}
-              </div>
-            ) : null}
+    <EmployeeAdminShell title="캘린더 링크 생성" subtitle="구독 링크와 부서 범위를 관리합니다." activeHref="/admin/ical-subscriptions">
+      <section className={styles.page}>
+        <div className={styles.toolbar}>
+          <div className={styles.heading}><h2>구독 목록</h2><span className={styles.count}>{subscriptions.length}</span><span className={styles.activeCount}>활성 {activeCount}</span></div>
+          <div className={styles.actions}>
+            <Action disabled={loadingSubscriptions} onClick={() => refreshSubscriptionsWithNotice().catch(err => setError(err.message))}><RefreshCw size={14} />새로고침</Action>
+            <Action primary aria-expanded={showCreate} onClick={() => setShowCreate(!showCreate)}>{showCreate ? <X size={14} /> : <Plus size={14} />}{showCreate ? '닫기' : '새 링크'}</Action>
           </div>
         </div>
-
-        <div className="card" style={{ padding: 12, display: 'grid', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-1)' }}>구독 목록</div>
-              <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 2 }}>
-                활성 {activeCount}개 · 전체 {subscriptions.length}개
-              </div>
-            </div>
-            <button type="button" className="tab-btn" onClick={refreshSubscriptionsWithNotice} disabled={loadingSubscriptions}>
-              {loadingSubscriptions ? <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
-              새 형식 반영
-            </button>
+        {showCreate && <div className={styles.create}>
+          <div className={styles.toolbar}><strong>부서 선택 <span className={styles.muted}>· {selectedCount}개</span></strong>
+            <div className={styles.actions}><Action disabled={loadingEmployees} onClick={() => setSelectedDepts(employeeDepartments)}>전체 선택</Action><Action onClick={() => setSelectedDepts([])}>해제</Action></div>
           </div>
-
-          <div style={{ display: 'grid', gap: 8 }}>
-            {loadingSubscriptions ? (
-              <div style={{ color: 'var(--text-2)', fontSize: 13 }}>구독 목록을 불러오는 중...</div>
-            ) : subscriptions.length === 0 ? (
-              <div style={{ color: 'var(--text-2)', fontSize: 13 }}>아직 생성된 구독이 없습니다.</div>
-            ) : (
-              subscriptions.map((item) => (
-                <SubscriptionCard
-                  key={item.id}
-                  item={item}
-                  onCopyUrl={() => copy(item.url, 'URL')}
-                  onCopyWebcal={() => copy(item.webcalUrl, 'webcal URL')}
-                  onToggleActive={(active) => setActive(item.token, !active)}
+          {loadingEmployees ? <p className={styles.muted}>부서를 불러오는 중...</p> : employeeDepartments.length === 0 ? <p className={styles.muted}>선택할 부서가 없습니다.</p> :
+            <Departments departments={employeeDepartments} selected={effectiveSelectedDepts} onChange={setSelectedDepts} disabled={creating} />}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0', fontSize: 13 }}><input type="checkbox" checked={personalLink} onChange={e => setPersonalLink(e.target.checked)} disabled={creating} />개인용 링크 (선택 직원의 현재 소속팀 자동 반영)</label>
+          {personalLink && <select className="ui-input" style={{ maxWidth: 280, marginBottom: 12 }} value={personalOwnerEmpNo} onChange={e => setPersonalOwnerEmpNo(e.target.value)} disabled={creating}><option value="">직원 선택</option>{employees.filter(e => e.isActive !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'ko')).map(e => <option key={e.empNo} value={e.empNo}>{e.name} · {e.dept}</option>)}</select>}
+          <div className={styles.toolbar}><span className={styles.muted}>이름: {personalLink ? personalLabel : autoLabel}</span>
+            <Action primary onClick={createSubscription} disabled={creating || loadingEmployees || !employeeDepartments.length || (personalLink ? !personalOwnerEmpNo : selectedCount === 0)}><Link2 size={14} />{creating ? '생성 중' : '링크 생성'}</Action></div>
+        </div>}
+        {(error || message || copyNotice || reloadNotice) && <div role={error ? 'alert' : 'status'} className={error ? styles.error : styles.notice}>{error || copyNotice || reloadNotice || message}</div>}
+        <div className={styles.tableScroll}>
+          <table className={styles.table} aria-label="캘린더 구독 목록">
+            <colgroup><col style={{ width: '30%' }} /><col /><col style={{ width: 74 }} /><col style={{ width: 202 }} /></colgroup>
+            <thead><tr><th scope="col">링크명</th><th scope="col">구독 부서</th><th scope="col">상태</th><th scope="col">관리</th></tr></thead>
+            <tbody>
+              {loadingSubscriptions || !subscriptions.length ? <tr><td colSpan={4} className={styles.empty}>{loadingSubscriptions ? '구독 목록을 불러오는 중...' : '등록된 구독이 없습니다. 새 링크를 생성해 주세요.'}</td></tr> :
+                subscriptions.map(item => <SubscriptionRow key={item.id} item={item} departments={employeeDepartments} employees={employees}
+                  onCopyUrl={() => copy(item.url, 'URL').catch(err => setError(err.message))}
+                  onCopyWebcal={() => copy(item.webcalUrl, 'webcal URL').catch(err => setError(err.message))}
+                  onToggleActive={active => setActive(item.token, !active)}
                   onDelete={() => deleteSubscription(item.token, item.label)}
-                />
-              ))
-            )}
-          </div>
+                  onUpdateDepts={depts => updateSubscriptionDepartments(item.token, depts)} />)}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </section>
     </EmployeeAdminShell>
   );
 }

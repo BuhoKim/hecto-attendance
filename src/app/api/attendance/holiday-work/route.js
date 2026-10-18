@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { fetchHolidayWork, saveHolidayWork } from '@/lib/supabaseDb';
 import { getKstMonthKey } from '@/lib/kstDate';
@@ -17,7 +18,7 @@ export async function GET(request) {
     return NextResponse.json({ success: true, holidayWorks });
   } catch (err) {
     console.error('[Holiday Work GET API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }
 
@@ -51,6 +52,6 @@ export async function POST(request) {
     return NextResponse.json({ success: true, message: '휴일근무 대체휴가 처리가 업데이트되었습니다.' });
   } catch (err) {
     console.error('[Holiday Work POST API]', err);
-    return NextResponse.json({ error: err.message || '서버 오류가 발생했습니다.' }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(err) }, { status: 500 });
   }
 }

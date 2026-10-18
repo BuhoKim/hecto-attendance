@@ -9,7 +9,7 @@
 const { loadSyncEnv } = require('./loadEnv');
 const mysql = require('mysql2/promise');
 const { createSyncSupabaseClient } = require('./supabaseClient');
-const { syncLeavesToNaverWorks } = require('./naverWorks');
+const { syncLeavesToNaverWorks, syncDepartmentCalendars } = require('./naverWorks');
 const { getAttendanceWindow, saveAttendanceCheckpoint, formatAttendanceMetrics } = require('./attendanceIncremental');
 
 loadSyncEnv();
@@ -473,6 +473,9 @@ async function syncLeaves(conn) {
     });
 
     await syncLeavesToNaverWorks(leavesWithEmails);
+    if (typeof syncDepartmentCalendars === 'function') {
+      await syncDepartmentCalendars(supabase);
+    }
   } catch (nwErr) {
     console.error('[NaverWorks Sync Error]', nwErr.message);
   }

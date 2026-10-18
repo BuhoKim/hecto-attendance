@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Holidays from 'date-holidays';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,6 @@ const getServiceKey = () =>
   process.env.HOLIDAY_API_SERVICE_KEY ||
   process.env.DATA_GO_KR_HOLIDAY_SERVICE_KEY ||
   process.env.DATA_GO_KR_SERVICE_KEY ||
-  process.env.NEXT_PUBLIC_HOLIDAY_API_SERVICE_KEY ||
   '';
 
 const normalizeServiceKey = (value) => {
@@ -94,7 +94,7 @@ export async function GET(_request, context) {
   try {
     const params = await context?.params;
     const year = Number(params?.year);
-    if (!Number.isFinite(year) || year < 1900) {
+    if (!Number.isInteger(year) || year < 1900 || year > 2200) {
       return NextResponse.json({ error: '유효한 연도를 입력하세요.' }, { status: 400 });
     }
 
@@ -132,7 +132,7 @@ export async function GET(_request, context) {
   } catch (error) {
     console.error('[Holiday API]', error);
     return NextResponse.json({
-      error: error?.message || '공휴일 정보를 불러오지 못했습니다.',
+      error: publicErrorMessage(error, '공휴일 정보를 불러오지 못했습니다.'),
     }, { status: 500 });
   }
 }

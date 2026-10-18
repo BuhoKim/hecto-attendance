@@ -18,6 +18,7 @@ const LeaveTab = dynamic(() => import('../tabs/LeaveTab'), { ssr: false });
 const OvertimeTab = dynamic(() => import('../tabs/OvertimeTab'), { ssr: false });
 const AdminPanelTabs = dynamic(() => import('../tabs/AdminPanelTabs'), { ssr: false });
 const EmployeeAdminTab = dynamic(() => import('../tabs/EmployeeAdminTab'), { ssr: false });
+const AttendanceExportTab = dynamic(() => import('../tabs/AttendanceExportTab'), { ssr: false });
 
 function DashboardTabSync({ setActiveTab }) {
   const searchParams = useSearchParams();
@@ -39,6 +40,7 @@ const pageTitles = {
   MANUAL_APPROVAL: '수동 요청 내역',
   USER_REGISTER: '사용자 계정 등록',
   CAPS_UPLOAD: '캡스 출입기록 업로드',
+  ATTENDANCE_EXPORT: '근태기록 저장',
 };
 
 const pageSubtitles = {
@@ -53,6 +55,7 @@ const pageSubtitles = {
   MANUAL_APPROVAL: '출퇴근 수정 요청과 근무일정 조정 요청을 함께 심사합니다.',
   USER_REGISTER: '로그인 계정과 사원번호 정보를 연결해 등록합니다.',
   CAPS_UPLOAD: '캡스 출입기록 파일을 업로드해 월간 기록에 반영합니다.',
+  ATTENDANCE_EXPORT: '연도, 월, 부서를 선택해 월간 근태현황을 엑셀로 저장합니다.',
 };
 
 export default function DashboardShell({
@@ -253,7 +256,7 @@ export default function DashboardShell({
           style={{ objectFit: 'contain' }}
         />
         <div className="mobile-header__actions">
-          <button className="icon-btn" onClick={() => fetchTodayData()} disabled={refreshing} title="새로고침">
+          <button className="icon-btn" onClick={() => refreshAllData()} disabled={refreshing} title="새로고침">
             <RefreshCw style={{ width: 15, height: 15, ...(refreshing ? { animation: 'spin 1s linear infinite' } : {}) }} />
           </button>
           <button className="icon-btn" onClick={toggleTheme} title={theme === 'dark' ? '라이트 모드' : '다크 모드'}>
@@ -299,7 +302,7 @@ export default function DashboardShell({
                 ))}
               </select>
             )}
-            <button className="icon-btn" onClick={() => fetchTodayData()} disabled={refreshing} title="새로고침">
+            <button className="icon-btn" onClick={() => refreshAllData()} disabled={refreshing} title="새로고침">
               <RefreshCw style={{ width: 15, height: 15, ...(refreshing ? { animation: 'spin 1s linear infinite' } : {}) }} />
             </button>
             <button className="icon-btn" onClick={toggleTheme} title={theme === 'dark' ? '라이트 모드' : '다크 모드'}>
@@ -398,6 +401,10 @@ export default function DashboardShell({
             refreshData={handleRefreshData}
             selectedMonth={selectedMonth}
           />
+        )}
+
+        {activeTab === 'ATTENDANCE_EXPORT' && isAdmin && (
+          <AttendanceExportTab data={data} myDept={myDept} />
         )}
 
         {['MANUAL_APPROVAL', 'USER_REGISTER', 'CAPS_UPLOAD'].includes(activeTab) && (isAdmin || isLeader) && (

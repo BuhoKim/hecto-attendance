@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseClient';
 import { isAdminRole } from '@/lib/roleUtils';
+import { AUTH_MODE_COOKIE, MASTER_LOGIN_EMAIL, createAuthModeCookie } from '@/lib/authMode';
+import { checkRateLimit, clearRateLimit, getRequestIp } from '@/lib/rateLimit';
 
 const normalizeIdentifier = (value) => String(value ?? '').trim();
 
@@ -14,15 +16,25 @@ export async function POST(request) {
 
     const supabase = getAdminClient();
     const cleanId = normalizeIdentifier(identifier);
+    const rateLimitKey = `login:${getRequestIp(request)}:${cleanId.toLowerCase()}`;
+    const rate = checkRateLimit(rateLimitKey, { limit: 10, windowMs: 15 * 60 * 1000 });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요.' },
+        { status: 429, headers: { 'Retry-After': String(rate.retryAfter) } }
+      );
+    }
 
     // 1. sa_employees 사원 정보 조회 (login_id, emp_no, email 모두 대응)
     let matchedEmp = null;
     try {
-      const { data: empList } = await supabase
-        .from('sa_employees')
-        .select('*')
-        .or(`login_id.eq.${cleanId},emp_no.eq.${cleanId},email.eq.${cleanId},email.ilike.${cleanId}@%`)
-        .limit(1);
+      const lookups = [
+        supabase.from('sa_employees').select('*').eq('login_id', cleanId).maybeSingle(),
+        supabase.from('sa_employees').select('*').eq('emp_no', cleanId).maybeSingle(),
+        supabase.from('sa_employees').select('*').eq('email', cleanId).maybeSingle(),
+      ];
+      const lookupResults = await Promise.all(lookups);
+      const empList = lookupResults.map((result) => result.data).filter(Boolean);
 
       if (empList && empList.length > 0) {
         matchedEmp = empList[0];
@@ -56,9 +68,12 @@ export async function POST(request) {
 
     let authData = null;
     let authError = null;
+    // Signing in mutates the client's DB authorization; keep database access on
+    // the separate service-role client above, including first-login bootstrap.
+    const authClient = getAdminClient();
 
     for (const email of uniqueCandidateEmails) {
-      const result = await supabase.auth.signInWithPassword({
+      const result = await authClient.auth.signInWithPassword({
         email,
         password,
       });
@@ -75,6 +90,8 @@ export async function POST(request) {
     if (authError || !authData?.user || !authData?.session) {
       return NextResponse.json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 });
     }
+
+    clearRateLimit(rateLimitKey);
 
     const userId = authData.user.id;
     const accessToken = authData.session.access_token;
@@ -101,9 +118,27 @@ export async function POST(request) {
       profile = fallbackProfile || null;
     }
 
-    const resolvedIsAdmin = isAdminRole(profile || {}) || cleanId === 'admin' || realLoginId === 'admin';
-    const position = profile?.position || '';
-    const rank = profile?.rank || '';
+    const isMasterAccount = authData.user.email?.toLowerCase() === MASTER_LOGIN_EMAIL;
+    const masterLoginId = MASTER_LOGIN_EMAIL.split('@')[0];
+    const masterRequested = isMasterAccount
+      && [MASTER_LOGIN_EMAIL, masterLoginId].includes(cleanId.toLowerCase());
+    const employeeMode = isMasterAccount && !masterRequested;
+    if (!masterRequested) {
+      const { data: employee, error: employeeError } = await supabase
+        .from('sa_employees')
+        .select('is_active')
+        .eq('emp_no', profile?.emp_no || realEmpNo)
+        .maybeSingle();
+      if (employeeError) throw employeeError;
+      if (employee?.is_active !== true) {
+        return NextResponse.json({ error: '사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.' }, { status: 403 });
+      }
+    }
+    const resolvedIsAdmin = isMasterAccount
+      ? masterRequested
+      : isAdminRole(profile || {});
+    const position = employeeMode ? '' : (profile?.position || '');
+    const rank = employeeMode ? '' : (profile?.rank || '');
     const isLeader = Boolean(position === '팀장' || position === '실장' || resolvedIsAdmin);
 
     // 부트스트랩 프로필 생성
@@ -152,6 +187,7 @@ export async function POST(request) {
 
     response.cookies.set('sb-access-token', accessToken, cookieOpts);
     response.cookies.set('sb-refresh-token', refreshToken, cookieOpts);
+    response.cookies.set(AUTH_MODE_COOKIE, createAuthModeCookie(userId, masterRequested ? 'master' : 'employee'), cookieOpts);
     response.cookies.set('must-change-password', String(profile?.must_change_password ?? false), { ...cookieOpts, httpOnly: false });
     response.cookies.set('user-emp-no', realEmpNo, { ...cookieOpts, httpOnly: false });
     response.cookies.set('user-login-id', realLoginId, { ...cookieOpts, httpOnly: false });

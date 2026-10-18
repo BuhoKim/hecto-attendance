@@ -1,3 +1,14 @@
+function getNextCalendarDay(dateStr) {
+  if (!dateStr) return '';
+  const clean = dateStr.length === 8 && !dateStr.includes('-')
+    ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+    : String(dateStr).slice(0, 10);
+  const [y, m, d] = clean.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt.toISOString().slice(0, 10);
+}
+
 /**
  * ================================================================
  * 네이버웍스(NAVER WORKS) API 연동 모듈 (CommonJS - 데몬용)
@@ -107,7 +118,7 @@ async function getAccessToken() {
     assertion: jwt,
     client_id: cfg.clientId,
     client_secret: cfg.clientSecret,
-    scope: 'directory',
+    scope: 'calendar directory',
   });
 
   const res = await fetch('https://auth.worksmobile.com/oauth2/v2.0/token', {
@@ -366,7 +377,201 @@ async function syncLeavesToNaverWorks(leavesWithEmails = []) {
   return { success: errors === 0, processed, skipped, errors };
 }
 
+
+/**
+ * 부서별 네이버웍스 공유 캘린더 자동 동기화 (멤버 및 휴가 일정)
+ */
+async function syncDepartmentCalendars(supabase) {
+  if (!isNaverWorksConfigured() || !supabase) {
+    return { success: true, processed: 0 };
+  }
+
+  const token = await getAccessToken();
+  if (!token) return { success: false, error: '토큰 발급 실패' };
+
+  const cfg = getEnvConfig();
+  const serviceAccount = cfg.serviceAccount;
+
+  // 1. 등록된 부서 캘린더 목록 조회
+  const { data: calendars, error: calErr } = await supabase
+    .from('sa_ical_subscriptions')
+    .select('*')
+    .eq('scope', 'naver-works-calendar')
+    .eq('is_active', true);
+
+  if (calErr || !calendars || calendars.length === 0) {
+    return { success: true, processed: 0 };
+  }
+
+  let totalEventsCreated = 0;
+
+  for (const cal of calendars) {
+    const calendarId = cal.token;
+    const dept = cal.depts?.[0];
+    if (!calendarId || !dept) continue;
+
+    let excludedEmpNos = [];
+    try {
+      if (cal.owner_emp_no && cal.owner_emp_no.startsWith('[')) {
+        excludedEmpNos = JSON.parse(cal.owner_emp_no);
+      }
+    } catch {
+      excludedEmpNos = [];
+    }
+    const excludedSet = new Set(excludedEmpNos.map(String));
+
+    // 부서 정직원 목록 조회 (퇴사/비활성 제외)
+    const { data: emps } = await supabase
+      .from('sa_employees')
+      .select('emp_no, name, dept, email, status, is_active')
+      .eq('dept', dept);
+
+    const activeEmps = (emps || []).filter((e) => {
+      if (!e || e.is_active === false || e.status === 'resigned') return false;
+      const empNo = String(e.emp_no || '').trim();
+      return empNo && !excludedSet.has(empNo);
+    });
+
+    const validEmpNos = activeEmps.map((e) => String(e.emp_no));
+    const empMap = new Map(activeEmps.map((e) => [String(e.emp_no), e]));
+
+    // 멤버 갱신 (부서 이동 등으로 변경되었을 수 있음)
+    const members = [];
+    const seenEmails = new Set();
+    for (const e of activeEmps) {
+      const email = String(e.email || '').trim().toLowerCase();
+      if (email && email.includes('@') && !seenEmails.has(email)) {
+        seenEmails.add(email);
+        members.push({ id: email, type: 'USER', role: 'EVENT_READ' });
+      }
+    }
+
+    try {
+      await fetch(`https://www.worksapis.com/v1.0/calendars/${encodeURIComponent(calendarId)}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ members }),
+      });
+    } catch (patchErr) {
+      console.warn(`[NaverWorks Calendar Member Update Warning] ${dept}:`, patchErr.message);
+    }
+
+    if (validEmpNos.length === 0) continue;
+
+    // 최근 30일 ~ 향후 90일 승인 휴가 조회
+    const now = new Date();
+    const pastStr = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '');
+    const futureStr = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10).replace(/-/g, '');
+
+    const { data: leaves } = await supabase
+      .from('sa_leaves')
+      .select('*')
+      .in('emp_no', validEmpNos)
+      .eq('status', '40')
+      .gte('end_date', pastStr)
+      .lte('start_date', futureStr);
+
+    if (!leaves || leaves.length === 0) continue;
+
+    // 네이버웍스 기존 등록 일정 확인
+    const calFrom = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000).toISOString();
+    const calUntil = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString();
+
+    let existingKeys = new Set();
+    try {
+      const listRes = await fetch(
+        `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events?fromDateTime=${encodeURIComponent(calFrom)}&untilDateTime=${encodeURIComponent(calUntil)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        for (const ev of listData.events || []) {
+          for (const comp of ev.eventComponents || []) {
+            const m = comp.description?.match(/\[KEY:\s*([^\]]+)\]/);
+            if (m) existingKeys.add(m[1].trim());
+            else if (comp.summary && comp.start?.date) existingKeys.add(`${comp.summary}_${comp.start.date}`);
+          }
+        }
+      }
+    } catch {}
+
+    for (const l of leaves) {
+      const emp = empMap.get(String(l.emp_no));
+      if (!emp) continue;
+
+      const startDate = l.start_date?.length === 8
+        ? `${l.start_date.slice(0, 4)}-${l.start_date.slice(4, 6)}-${l.start_date.slice(6, 8)}`
+        : String(l.start_date || '').slice(0, 10);
+      const endDate = l.end_date?.length === 8
+        ? `${l.end_date.slice(0, 4)}-${l.end_date.slice(4, 6)}-${l.end_date.slice(6, 8)}`
+        : String(l.end_date || l.start_date || '').slice(0, 10);
+
+      const leaveKey = `${l.emp_no}_${startDate}_${l.leave_code}`;
+      const empName = l.emp_name || emp.name;
+      const leaveLabel = l.leave_name || '연차';
+      const summary = `${empName} · ${leaveLabel}`;
+
+      if (existingKeys.has(leaveKey) || existingKeys.has(`${summary}_${startDate}`)) {
+        continue;
+      }
+
+      const description = [
+        `이름: ${empName}`,
+        `부서: ${dept}`,
+        `휴가종류: ${leaveLabel}`,
+        `기간: ${startDate} ~ ${endDate}`,
+        `일수: ${l.leave_days || 1}일`,
+        `[KEY: ${leaveKey}]`,
+      ].join('\n');
+
+      try {
+        const postRes = await fetch(
+          `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              eventComponents: [
+                {
+                  summary,
+                  description,
+                  start: { date: startDate },
+                  end: { date: getNextCalendarDay(endDate) },
+                  transparency: 'TRANSPARENT',
+                  visibility: 'PUBLIC',
+                },
+              ],
+              sendNotification: false,
+            }),
+          }
+        );
+        if (postRes.ok) {
+          totalEventsCreated++;
+          existingKeys.add(leaveKey);
+        }
+      } catch (err) {
+        console.warn(`[Calendar Event Create Error] ${summary}:`, err.message);
+      }
+
+      await new Promise((r) => setTimeout(r, 60));
+    }
+  }
+
+  if (totalEventsCreated > 0) {
+    console.log(`[NaverWorks Calendar Sync] 부서 캘린더에 총 ${totalEventsCreated}건의 신규 연차 일정을 동기화했습니다.`);
+  }
+
+  return { success: true, created: totalEventsCreated };
+}
+
 module.exports = {
+  syncDepartmentCalendars,
   isNaverWorksConfigured,
   getAccessToken,
   calculateLeaveTimeWindow,

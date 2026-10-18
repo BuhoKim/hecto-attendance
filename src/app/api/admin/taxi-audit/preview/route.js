@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import * as XLSX from 'xlsx';
 import { verifySession } from '@/lib/auth';
 import { fetchAttendanceLogs } from '@/lib/supabaseDb';
@@ -8,6 +9,8 @@ export const dynamic = 'force-dynamic';
 
 const NIGHT_CUTOFF_MINUTES = 6 * 60;
 const LATE_NIGHT_RIDE_MINUTES = 22 * 60;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_SHEET_ROWS = 50_000;
 
 const HEADER_ALIASES = {
   ticketNo: ['이용번호', '번호', 'ticket', 'ticketno'],
@@ -112,7 +115,7 @@ function getHeaderIndex(headers, aliases) {
 }
 
 function parseWorkbookRows(buffer) {
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true, sheetRows: MAX_SHEET_ROWS });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
@@ -262,7 +265,14 @@ export async function POST(request) {
       return NextResponse.json({ error: '업로드할 파일을 선택해 주세요.' }, { status: 400 });
     }
 
+    if (Number(file.size) > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: '파일 크기는 10MB 이하만 업로드할 수 있습니다.' }, { status: 413 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (buffer.length > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: '파일 크기는 10MB 이하만 업로드할 수 있습니다.' }, { status: 413 });
+    }
     const { sheetName, headers, rows: rawRows } = parseWorkbookRows(buffer);
 
     const months = new Set();
@@ -393,6 +403,6 @@ export async function POST(request) {
 
   } catch (error) {
     console.error('[Taxi audit preview]', error);
-    return NextResponse.json({ error: String(error?.message || error || '파일을 불러오지 못했습니다.') }, { status: 500 });
+    return NextResponse.json({ error: publicErrorMessage(error, '파일을 불러오지 못했습니다.') }, { status: 500 });
   }
 }

@@ -205,7 +205,8 @@ CREATE TABLE IF NOT EXISTS SA_ical_subscriptions (
   token       TEXT NOT NULL UNIQUE,
   label       VARCHAR(200) NOT NULL,
   depts       JSONB NOT NULL DEFAULT '[]'::jsonb,
-  scope       VARCHAR(50) NOT NULL DEFAULT 'leave-calendar',
+    scope       VARCHAR(50) NOT NULL DEFAULT 'leave-calendar',
+    owner_emp_no VARCHAR(20),
   is_active   BOOLEAN NOT NULL DEFAULT TRUE,
   created_by  UUID REFERENCES auth.users(id),
   created_at  TIMESTAMPTZ DEFAULT NOW(),
@@ -240,7 +241,7 @@ RETURNS BOOLEAN AS $$
     (SELECT is_admin FROM SA_profiles WHERE id = auth.uid()),
     FALSE
   );
-$$ LANGUAGE sql SECURITY DEFINER;
+$$ LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- 헬퍼 함수: 현재 로그인 사용자가 팀장(직책)인지 확인
 CREATE OR REPLACE FUNCTION SA_is_leader()
@@ -249,13 +250,13 @@ RETURNS BOOLEAN AS $$
     (SELECT position = '팀장' FROM SA_profiles WHERE id = auth.uid()),
     FALSE
   );
-$$ LANGUAGE sql SECURITY DEFINER;
+$$ LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- 헬퍼 함수: 현재 로그인 사용자의 emp_no 반환
 CREATE OR REPLACE FUNCTION SA_my_emp_no()
 RETURNS VARCHAR AS $$
   SELECT emp_no FROM SA_profiles WHERE id = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER;
+$$ LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_temp;
 
 -- SA_employees: 관리자/팀장=전체, 직원=본인
 CREATE POLICY "sa_employees_admin"    ON SA_employees FOR ALL    USING (SA_is_admin() OR SA_is_leader());
@@ -273,7 +274,21 @@ CREATE POLICY "sa_leaves_self"        ON SA_leaves FOR SELECT USING (emp_no = SA
 CREATE POLICY "sa_profiles_admin"     ON SA_profiles FOR ALL    USING (SA_is_admin());
 CREATE POLICY "sa_profiles_leader"    ON SA_profiles FOR SELECT USING (SA_is_leader());
 CREATE POLICY "sa_profiles_self"      ON SA_profiles FOR SELECT USING (id = auth.uid());
-CREATE POLICY "sa_profiles_self_upd"  ON SA_profiles FOR UPDATE USING (id = auth.uid());
+CREATE OR REPLACE FUNCTION public.sa_profile_auth_unchanged(
+  old_emp_no varchar, old_is_admin boolean, old_position text
+)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public, pg_temp AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.sa_profiles
+    WHERE id = auth.uid() AND emp_no = old_emp_no
+      AND is_admin = old_is_admin AND position = old_position
+  );
+$$;
+REVOKE ALL ON FUNCTION public.sa_profile_auth_unchanged(varchar, boolean, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.sa_profile_auth_unchanged(varchar, boolean, text) TO authenticated;
+CREATE POLICY "sa_profiles_self_upd" ON SA_profiles FOR UPDATE USING (id = auth.uid())
+  WITH CHECK (id = auth.uid() AND public.sa_profile_auth_unchanged(emp_no, is_admin, position));
 
 -- SA_overtime_settings: 관리자=전체, 직원=조회만
 CREATE POLICY "sa_ot_settings_admin"  ON SA_overtime_settings FOR ALL    USING (SA_is_admin());
@@ -308,6 +323,9 @@ CREATE POLICY "sa_manual_self_read"   ON SA_manual_checkins FOR SELECT USING (em
 CREATE POLICY "sa_manual_self_insert" ON SA_manual_checkins FOR INSERT WITH CHECK (emp_no = SA_my_emp_no());
 CREATE POLICY "sa_ical_subscriptions_admin" ON SA_ical_subscriptions FOR ALL USING (SA_is_admin()) WITH CHECK (SA_is_admin());
 
+-- SA_taxi_explanations: 서버의 서명 토큰 API만 service_role로 접근
+-- anon/authenticated에는 정책을 부여하지 않아 직접 조회·수정을 차단한다.
+
 -- ----------------------------------------------------------------
 -- 인덱스
 -- ----------------------------------------------------------------
@@ -337,6 +355,8 @@ CREATE TABLE IF NOT EXISTS SA_taxi_explanations (
   updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE SA_taxi_explanations ENABLE ROW LEVEL SECURITY;
+
 CREATE INDEX IF NOT EXISTS idx_sa_attendance_emp_no   ON SA_attendance (emp_no);
 CREATE INDEX IF NOT EXISTS idx_sa_attendance_log_time ON SA_attendance (log_time DESC);
 CREATE INDEX IF NOT EXISTS idx_sa_attendance_a_time   ON SA_attendance (a_time DESC);
@@ -354,4 +374,3 @@ CREATE INDEX IF NOT EXISTS idx_sa_ical_subscriptions_active ON SA_ical_subscript
 CREATE INDEX IF NOT EXISTS idx_sa_taxi_explanations_token ON SA_taxi_explanations (token);
 CREATE INDEX IF NOT EXISTS idx_sa_taxi_explanations_emp   ON SA_taxi_explanations (emp_no, status);
 CREATE INDEX IF NOT EXISTS idx_sa_taxi_explanations_order ON SA_taxi_explanations (order_id);
-

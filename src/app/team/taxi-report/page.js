@@ -6,6 +6,7 @@ import {
   CarTaxiFront,
   Calendar,
   Search,
+  Download,
   RefreshCcw,
   Building2,
   Clock,
@@ -21,10 +22,10 @@ import {
   Award,
   Sparkles,
   Zap,
-  ShieldCheck,
   Users,
 } from 'lucide-react';
 import { getKstDateKey, shiftKstDateKey } from '@/lib/kstDate';
+import { downloadTaxiReportPdf } from '@/lib/taxiReportPdf';
 
 function formatCurrency(val) {
   const num = Number(val || 0);
@@ -81,6 +82,7 @@ export default function TaxiReportPage() {
   const [endDate, setEndDate] = useState(today);
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [error, setError] = useState('');
   const [reportData, setReportData] = useState(null);
   const [meta, setMeta] = useState({ permissionScope: 'SINGLE_DEPT', userDept: '', allowedDepts: null });
@@ -160,6 +162,23 @@ export default function TaxiReportPage() {
     fetchReport(startDate, endDate, deptVal);
   };
 
+  const handlePdfDownload = async () => {
+    if (!reportData?.rows?.length) {
+      setError('다운로드할 이용내역이 없습니다.');
+      return;
+    }
+    try {
+      setPdfLoading(true);
+      setError('');
+      await downloadTaxiReportPdf(reportData.rows, { startDate, endDate, dept: selectedDept === 'ALL' ? '전체부서' : selectedDept });
+    } catch (downloadError) {
+      console.error('[Taxi Report PDF Error]', downloadError);
+      setError(downloadError?.message || 'PDF 다운로드에 실패했습니다.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
   // Filtered rows for full transaction table
   const filteredRows = useMemo(() => {
     if (!reportData?.rows) return [];
@@ -189,6 +208,8 @@ export default function TaxiReportPage() {
   const deptStats = reportData?.deptStats || [];
   const timeWindowStats = reportData?.timeWindowStats;
   const extraFeeStats = reportData?.extraFeeStats;
+  const excludedSummary = reportData?.excludedSummary;
+  const excludedStatusStats = reportData?.excludedStatusStats || [];
   const reasonStats = reportData?.reasonStats || [];
   const dailyStats = reportData?.dailyStats || [];
   const availableDepts = reportData?.availableDepts || [];
@@ -210,14 +231,6 @@ export default function TaxiReportPage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* 권한 영역 표시 배지 */}
-            <StatBadge tone={meta.permissionScope === 'ADMIN' ? 'purple' : meta.permissionScope === 'EXTERNAL_BIZ' ? 'amber' : 'blue'}>
-              <ShieldCheck size={13} style={{ marginRight: 4 }} />
-              {meta.permissionScope === 'ADMIN' && '전체 부서 조회 권한 (관리자)'}
-              {meta.permissionScope === 'EXTERNAL_BIZ' && '외부사업 4개 팀 공유 권한'}
-              {meta.permissionScope === 'SINGLE_DEPT' && `${displayDeptName} 전용 권한`}
-            </StatBadge>
-
             <button
               type="button"
               onClick={() => fetchReport()}
@@ -240,6 +253,30 @@ export default function TaxiReportPage() {
             >
               <RefreshCcw size={14} className={loading ? 'animate-spin' : ''} />
               새로고침
+            </button>
+            <button
+              type="button"
+              onClick={handlePdfDownload}
+              disabled={loading || pdfLoading || !reportData?.rows?.length}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                minHeight: 34,
+                borderRadius: 8,
+                border: '1px solid var(--amber)',
+                backgroundColor: 'var(--amber)',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: (loading || pdfLoading || !reportData?.rows?.length) ? 'not-allowed' : 'pointer',
+                opacity: (loading || pdfLoading || !reportData?.rows?.length) ? 0.65 : 1,
+                boxShadow: 'none',
+              }}
+            >
+              <Download size={14} />
+              {pdfLoading ? 'PDF 생성 중...' : 'PDF 다운로드'}
             </button>
           </div>
         </div>
@@ -561,6 +598,40 @@ export default function TaxiReportPage() {
                 {summary.activeDeptsCount}개 부서 <span style={{ fontSize: 16, color: 'var(--text-2)', fontWeight: 500 }}>({summary.activeEmployeesCount}명)</span>
               </div>
             </div>
+          </div>
+        )}
+
+        {excludedSummary?.totalCount > 0 && (
+          <div
+            className="taxi-report-section-card"
+            style={{
+              backgroundColor: 'rgba(148, 163, 184, 0.08)',
+              borderRadius: 12,
+              padding: '14px 18px',
+              border: '1px solid var(--border)',
+              marginBottom: 24,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>취소·환불 등 제외 내역</div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 3 }}>
+                  정상 이용 통계에서 제외하고 별도로 집계한 카카오T 주문입니다.
+                </div>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+                {excludedSummary.totalCount.toLocaleString()}건 · {formatCurrency(excludedSummary.totalAmount)}원
+              </div>
+            </div>
+            {excludedStatusStats.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                {excludedStatusStats.map((item) => (
+                  <span key={item.status} style={{ fontSize: 12, color: 'var(--text-2)', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 9px' }}>
+                    {item.status}: {item.count}건 ({formatCurrency(item.amount)}원)
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { buildTaxiAuditRowsFromKakao } from '@/lib/kakaoTaxiAuditApi';
 
@@ -81,7 +82,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('[Taxi Audit Kakao Query Error]', error);
     return NextResponse.json(
-      { error: String(error?.message || error || '카카오T 내역을 불러오지 못했습니다.') },
+      { error: publicErrorMessage(error, '카카오T 내역을 불러오지 못했습니다.') },
       { status: 500 }
     );
   }

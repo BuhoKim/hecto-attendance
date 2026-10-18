@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { fetchEmployeeSchedules, saveEmployeeSchedules } from '@/lib/supabaseDb';
 import { isAdminRole, isLeaderPosition } from '@/lib/roleUtils';
@@ -35,7 +36,7 @@ export async function GET(request) {
   } catch (err) {
     return NextResponse.json({
       success: false,
-      error: err.message
+      error: publicErrorMessage(err, '일정 조회 중 오류가 발생했습니다.')
     }, { status: 500 });
   }
 }
@@ -76,7 +77,7 @@ export async function POST(request) {
   } catch (err) {
     return NextResponse.json({
       success: false,
-      error: err.message
+      error: publicErrorMessage(err, '일정 저장 중 오류가 발생했습니다.')
     }, { status: 500 });
   }
 }

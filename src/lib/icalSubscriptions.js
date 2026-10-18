@@ -1,18 +1,21 @@
 import { getAdminClient } from './supabaseClient';
 import { normalizeIcalDeptList } from './icalToken';
+import {
+  buildIcalSubscriptionUpdatePayload,
+  normalizeIcalSubscriptionLabel,
+} from './icalSubscriptionPayload.mjs';
 
 export const ICAL_SUBSCRIPTION_TABLE = 'sa_ical_subscriptions';
 
-export function normalizeIcalSubscriptionLabel(value = '') {
-  return String(value || '').trim();
-}
+export { buildIcalSubscriptionUpdatePayload, normalizeIcalSubscriptionLabel } from './icalSubscriptionPayload.mjs';
 
-export function buildIcalSubscriptionPayload({ token, label, depts, createdBy = null, scope = 'leave-calendar' } = {}) {
+export function buildIcalSubscriptionPayload({ token, label, depts, createdBy = null, ownerEmpNo = null, scope = 'leave-calendar' } = {}) {
   return {
     token,
     label: normalizeIcalSubscriptionLabel(label),
     depts: normalizeIcalDeptList(depts),
     created_by: createdBy,
+    owner_emp_no: ownerEmpNo,
     scope: String(scope || 'leave-calendar'),
   };
 }
@@ -42,7 +45,7 @@ export async function listIcalSubscriptionRecords() {
   const supabase = getAdminClient();
   const { data, error } = await supabase
     .from(ICAL_SUBSCRIPTION_TABLE)
-    .select('id, token, label, depts, scope, is_active, revoked_at, created_by, created_at, updated_at')
+    .select('id, token, label, depts, scope, owner_emp_no, is_active, revoked_at, created_by, created_at, updated_at')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -56,7 +59,7 @@ export async function getIcalSubscriptionRecordByToken(token) {
   const supabase = getAdminClient();
   const { data, error } = await supabase
     .from(ICAL_SUBSCRIPTION_TABLE)
-    .select('id, token, label, depts, scope, is_active, revoked_at, created_by, created_at, updated_at')
+    .select('id, token, label, depts, scope, owner_emp_no, is_active, revoked_at, created_by, created_at, updated_at')
     .eq('token', String(token || '').trim())
     .maybeSingle();
 
@@ -111,6 +114,23 @@ export async function setIcalSubscriptionRecordActive(token, isActive = true) {
     throw error;
   }
 
+  return data || null;
+}
+
+export async function updateIcalSubscriptionRecord(token, updates = {}) {
+  const supabase = getAdminClient();
+  const payload = {
+    ...buildIcalSubscriptionUpdatePayload(updates),
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabase
+    .from(ICAL_SUBSCRIPTION_TABLE)
+    .update(payload)
+    .eq('token', String(token || '').trim())
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
   return data || null;
 }
 

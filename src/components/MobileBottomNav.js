@@ -11,8 +11,7 @@ import {
   X,
   CheckCircle,
   Clock,
-  Plus,
-  Upload,
+  Download,
   User,
   LogOut,
   CarTaxiFront,
@@ -31,10 +30,10 @@ const MOBILE_MORE_ITEMS = [
   { key: 'ICAL_SUBSCRIPTIONS', label: '캘린더 링크 생성', icon: CalendarDays, href: '/admin/ical-subscriptions', category: '부서', leaderOnly: true },
   { key: 'OVERTIME', label: '초과근무 관리', icon: Clock, href: '/?tab=OVERTIME', category: '부서', leaderOnly: true },
   { key: 'MANUAL_APPROVAL', label: '수동 요청 내역', icon: CheckCircle, href: '/?tab=MANUAL_APPROVAL', category: '부서', leaderOnly: true },
-  { key: 'USER_REGISTER', label: '신규 계정 등록', icon: Plus, href: '/?tab=USER_REGISTER', category: '관리자', adminOnly: true },
-  { key: 'CAPS_UPLOAD', label: '캡스 업로드', icon: Upload, href: '/?tab=CAPS_UPLOAD', category: '관리자', adminOnly: true },
+  { key: 'ATTENDANCE_EXPORT', label: '근태기록 저장', icon: Download, href: '/?tab=ATTENDANCE_EXPORT', category: '관리자', adminOnly: true },
   { key: 'TAXI_AUDIT', label: '택시 소명관리', icon: CarTaxiFront, href: '/admin/taxi-audit', category: '관리자', adminOnly: true },
   { key: 'EMPLOYEE_ADMIN', label: '직원 관리', icon: Users, href: '/admin/employees', category: '관리자', adminOnly: true },
+  { key: 'TERMINAL_ATTENDANCE', label: '석식 출입 조회', icon: Clock, href: '/admin/terminal-attendance', category: '관리자', adminOnly: true },
 ];
 
 export default function MobileBottomNav({

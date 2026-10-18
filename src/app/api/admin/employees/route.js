@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
 import { isAdminRole } from '@/lib/roleUtils';
+import { pickLatestProfile } from '@/lib/adminEmployeeProfile';
 
 const normalizeEmpNo = (value) => String(value ?? '').trim();
 
@@ -39,10 +41,10 @@ export async function GET(request) {
     ]);
 
     if (empRes.error) {
-      return NextResponse.json({ error: `직원 조회 실패: ${empRes.error.message}` }, { status: 500 });
+      return NextResponse.json({ error: publicErrorMessage(empRes.error, '직원 조회에 실패했습니다.') }, { status: 500 });
     }
     if (profileRes.error) {
-      return NextResponse.json({ error: `프로필 조회 실패: ${profileRes.error.message}` }, { status: 500 });
+      return NextResponse.json({ error: publicErrorMessage(profileRes.error, '프로필 조회에 실패했습니다.') }, { status: 500 });
     }
 
     let userMap = new Map();
@@ -56,13 +58,15 @@ export async function GET(request) {
     }
 
     // Keep the most recent row for each emp_no if duplicates exist.
-    const profileMap = new Map();
+    const profilesByEmployee = new Map();
     for (const profile of profileRes.data || []) {
-      profileMap.set(profile.emp_no, profile);
+      const profiles = profilesByEmployee.get(profile.emp_no) || [];
+      profiles.push(profile);
+      profilesByEmployee.set(profile.emp_no, profiles);
     }
 
     const employees = (empRes.data || []).map((emp) => {
-      const profile = profileMap.get(emp.emp_no);
+      const profile = pickLatestProfile(profilesByEmployee.get(emp.emp_no));
       const user = profile ? userMap.get(profile.id) : null;
       return {
         empNo: emp.emp_no,

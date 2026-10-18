@@ -1,10 +1,14 @@
 process.env.TZ = 'Asia/Seoul';
 import { NextResponse } from 'next/server';
+import { verifySession } from '@/lib/auth';
+import { getAdminClient } from '@/lib/supabaseClient';
+import { publicErrorMessage } from '@/lib/apiError.mjs';
+import { isLeaderPosition } from '@/lib/roleUtils';
 import { fetchAttendanceLogs, getSettings, fetchOvertimeSettings, fetchEmployeeSchedules, fetchEmployeeOvertimeRounds } from '@/lib/supabaseDb';
 import { getLeaveMeta } from '@/lib/leaveRules';
 import { isSpecialDayTeamDept } from '@/lib/nightScheduleRules';
 import { getKstDateKey, shiftKstDateKey } from '@/lib/kstDate';
-import { isManagedAttendanceDept, normalizeEmpNoKey } from '@/lib/dashboardUtils';
+import { isManagedAttendanceDept, normalizeDeptLoose, normalizeEmpNoKey } from '@/lib/dashboardUtils';
 import {
   TWO_HOUR_LEAVE_CODES,
   EARLY_MORNING_TARGET_DEPTS,
@@ -40,11 +44,58 @@ import { attendanceCache } from '@/lib/attendanceCache';
 
 export async function GET(request) {
   try {
+    const session = await verifySession(request);
+    if (!session) {
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month') || undefined; // YYYY-MM
     const dashboardOnly = !month || searchParams.get('dashboardOnly') === 'true';
     const excludeLogs = searchParams.get('excludeLogs') === 'true';
-    const empNoFilter = searchParams.get('empNo') || null;
+    const requestedEmpNo = searchParams.get('empNo');
+    const requested = requestedEmpNo === null ? null : [...new Set(
+      requestedEmpNo.split(',').map((value) => value.trim()).filter(Boolean)
+    )];
+    if (requested && requested.length === 0) {
+      return NextResponse.json({ error: '조회할 사원번호가 필요합니다.' }, { status: 400 });
+    }
+    let empNoFilter = requestedEmpNo;
+
+    if (!session.isAdmin) {
+      const supabase = getAdminClient();
+      let allowedEmpNos = [];
+
+      if (session.isLeader || isLeaderPosition(session.position)) {
+        const sessionDept = normalizeDeptLoose(session.dept || session.team);
+        const { data: teamEmployees, error: teamEmployeeError } = await supabase
+          .from('sa_employees')
+          .select('emp_no, dept')
+          .eq('is_active', true);
+        if (teamEmployeeError) throw teamEmployeeError;
+        allowedEmpNos = (teamEmployees || [])
+          .filter((employee) => sessionDept && normalizeDeptLoose(employee.dept) === sessionDept)
+          .map((employee) => String(employee.emp_no || '').trim())
+          .filter(Boolean);
+      } else if (session.empNo) {
+        allowedEmpNos = [String(session.empNo).trim()];
+      }
+
+      if (allowedEmpNos.length === 0) {
+        return NextResponse.json({ error: '조회 권한이 없습니다.' }, { status: 403 });
+      }
+
+      if (requested) {
+        const allowedSet = new Set(allowedEmpNos);
+        const unauthorized = requested.some((empNo) => !allowedSet.has(empNo));
+        if (unauthorized) {
+          return NextResponse.json({ error: '조회 권한이 없습니다.' }, { status: 403 });
+        }
+        empNoFilter = requested.join(',');
+      } else {
+        empNoFilter = allowedEmpNos.join(',');
+      }
+    }
 
     if (!empNoFilter && month) {
       const currentMonth = getKstMonthKey();
@@ -60,7 +111,14 @@ export async function GET(request) {
     const appSettings = getSettings();
     const nightCheckinGraceHours = Number(appSettings?.nightCheckinGraceHours ?? 3) || 3;
 
-    const { 
+    const scope = empNoFilter ? empNoFilter.split(',').map(value => value.trim()).filter(Boolean) : null;
+    const [attendance, employeeSchedules, overtimeSettings, overtimeRounds] = await Promise.all([
+      fetchAttendanceLogs(month, { dashboardOnly, excludeLogs, empNo: scope }),
+      fetchEmployeeSchedules(scope),
+      fetchOvertimeSettings(),
+      fetchEmployeeOvertimeRounds(scope),
+    ]);
+    const {
       logs: rawLogs, 
       employees, 
       leaves = [], 
@@ -70,13 +128,8 @@ export async function GET(request) {
       manualCheckins = [], 
       isDemo, 
       error 
-    } = await fetchAttendanceLogs(month, { dashboardOnly, excludeLogs, empNo: empNoFilter });
-
-    const employeeSchedules = await fetchEmployeeSchedules();
+    } = attendance;
     const employeeScheduleMap = buildEmployeeScheduleMap(employeeSchedules);
-
-    const overtimeSettings = await fetchOvertimeSettings();
-    const overtimeRounds = await fetchEmployeeOvertimeRounds();
 
     // Create override map: empNo_workDate -> schedule_start
     const overrideMap = buildScheduleOverrideMap(overrides);
@@ -626,8 +679,7 @@ export async function GET(request) {
     console.error('API attendance error:', err);
     return NextResponse.json({
       success: false,
-      error: err.message
+      error: publicErrorMessage(err, '근태 정보를 불러오는 중 오류가 발생했습니다.')
     }, { status: 500 });
   }
 }
-

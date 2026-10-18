@@ -52,3 +52,10 @@ port_8899_layout.html
 .vercel
 
 .env*.local
+
+# Private migration tools and database backups (never publish)
+/.migration-private/
+
+# Scratch scripts
+scratch/
+supabase/.temp/
