@@ -9,7 +9,7 @@ export default function EmployeePhoto({ empNo, fallback = null }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/api/employees/photo?empNo=${encodeURIComponent(empNo)}`}
+      src={`/api/employees/photo?v=2&empNo=${encodeURIComponent(empNo)}`}
       alt=""
       onError={() => setFailed(true)}
       style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }}

@@ -36,7 +36,6 @@ export async function GET(request) {
 
   const empNo = new URL(request.url).searchParams.get('empNo');
   const notFound = (reason) => {
-    console.warn('[Employee photo] miss', reason);
     return new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'no-store', 'X-Photo-Reason': reason } });
   };
   if (!empNo) return notFound('emp_no');
@@ -53,11 +52,7 @@ export async function GET(request) {
     const token = await getAccessToken();
     const headers = { Authorization: `Bearer ${token}` };
     const email = employee.email || (await getDirectoryByName(headers)).get(String(employee.name || '').trim());
-    if (!email) {
-      const directory = await getDirectoryByName(headers);
-      console.warn('[Employee photo] no email', { hasName: !!employee.name, nameLength: String(employee.name || '').length, directorySize: directory.size });
-      return notFound('email');
-    }
+    if (!email) return notFound('email');
 
     // The API redirects to a different host; fetch drops Authorization on
     // cross-origin redirects, so follow it manually with the token.
