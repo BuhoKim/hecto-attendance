@@ -1,0 +1,35 @@
+# 회사 계정으로 Git 및 Vercel 배포
+
+이 저장소는 회사 GitHub `BuhoKim`, Vercel `buhokim` 및 `hecto-qnm` 팀을 사용합니다.
+회사 이메일은 `bhkim@hecto.co.kr`입니다. 개인 계정은 회사 계정에 연결하지 않습니다.
+
+저장소 루트에서 다음 설정을 적용합니다. 전역 Git 설정은 변경하지 않습니다.
+
+```powershell
+git config --local user.name BuhoKim
+git config --local user.email bhkim@hecto.co.kr
+git config --local credential.useHttpPath true
+git config --local credential.https://github.com.username BuhoKim
+git remote set-url origin https://BuhoKim@github.com/BuhoKim/hecto-attendance.git
+```
+
+Git 인증은 Git Credential Manager에서 회사 계정으로 별도 승인합니다.
+커밋 작성자 설정과 원격 저장소 인증은 별개이므로 두 항목을 모두 확인합니다.
+기존 커밋의 작성자는 바꾸지 않습니다.
+
+Vercel의 회사 프로젝트 ID는 `prj_YojmL3PgRZsBqYrrO04eL0Rhb0x3`,
+팀 ID는 `team_yLe5G18lseR58Ba6LHf1jE2t`입니다.
+로컬 `.vercel/project.json`도 이 회사 프로젝트를 가리켜야 합니다.
+회사 CLI 인증은 비공개 디렉터리 `.migration-private/vercel-company`에 보관합니다.
+
+```powershell
+vercel.cmd whoami --global-config .migration-private/vercel-company --scope hecto-qnm
+```
+
+회사 계정의 GitHub 연결이 `BuhoKim`인지 Vercel 계정 Authentication에서 확인합니다.
+Hobby 플랜에서는 프로젝트 팀 소유자의 Git 계정으로 커밋해야 배포 권한이 인정됩니다.
+권한 차단 시 계정 연결과 실제 커밋 작성자부터 확인하고, 작성자 위장이나 계정 혼용으로 우회하지 않습니다.
+
+운영 도메인은 `https://atdc.hectoqnm.co.kr`이며 운영 Supabase는 회사 서울 프로젝트
+`qcpqcuzvirmbjzqjzapt`입니다. 배포 전 환경을 확인하고, 새 배포가 READY인 것을
+확인한 뒤 운영 도메인을 전환합니다.
