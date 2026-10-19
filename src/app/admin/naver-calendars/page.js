@@ -21,12 +21,12 @@ export default function AdminNaverCalendarsPage() {
   const [search, setSearch] = useState('');
   const [expandedDept, setExpandedDept] = useState(null);
   const [excludedMap, setExcludedMap] = useState({});
+  const [sourceDeptMap, setSourceDeptMap] = useState({});
   const [savingDept, setSavingDept] = useState(null);
   const [message, setMessage] = useState(null);
 
   const fetchStatus = async () => {
     setLoading(true);
-    setMessage(null);
     try {
       const res = await fetch(`/api/admin/naver-calendars?t=${Date.now()}`, {
         cache: 'no-store',
@@ -45,6 +45,7 @@ export default function AdminNaverCalendarsPage() {
         map[d.dept] = new Set((d.excludedEmpNos || []).map(String));
       }
       setExcludedMap(map);
+      setSourceDeptMap(Object.fromEntries((data.departments || []).map((d) => [d.dept, new Set(d.sourceDepts || [d.dept])])));
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
@@ -53,7 +54,8 @@ export default function AdminNaverCalendarsPage() {
   };
 
   useEffect(() => {
-    fetchStatus();
+    const timer = setTimeout(fetchStatus, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const filteredDepts = useMemo(() => {
@@ -88,6 +90,7 @@ export default function AdminNaverCalendarsPage() {
         body: JSON.stringify({
           dept,
           excludedEmpNos: excludedList,
+          sourceDepts: Array.from(sourceDeptMap[dept] || [dept]),
           action,
         }),
       });
@@ -98,12 +101,12 @@ export default function AdminNaverCalendarsPage() {
       }
 
       const syncMsg = result.syncResult
-        ? ` (등록: ${result.syncResult.created}건, 유지: ${result.syncResult.skipped}건)`
+        ? ` (등록: ${result.syncResult.created}건, 유지: ${result.syncResult.skipped}건, 삭제: ${result.syncResult.deleted || 0}건)`
         : '';
 
       setMessage({
-        type: 'success',
-        text: `[${dept}] 캘린더 설정이 저장되었습니다. (포함: ${result.includedCount}명, 제외: ${result.excludedCount}명)${syncMsg}`,
+        type: result.syncError || result.syncResult?.failed ? 'error' : 'success',
+        text: `[${dept}] 캘린더 설정이 저장되었습니다.${syncMsg}${result.syncError ? ` 일정 동기화 실패: ${result.syncError}` : result.syncResult?.failed ? ` 동기화 실패 ${result.syncResult.failed}건: 일정 동기화를 다시 실행해주세요.` : ''}`,
       });
       await fetchStatus();
     } catch (err) {
@@ -258,6 +261,7 @@ export default function AdminNaverCalendarsPage() {
                     (e) => e.isActive && !excludedSet.has(String(e.empNo))
                   ).length;
                   const isSaving = savingDept === d.dept;
+                  const selectedSources = sourceDeptMap[d.dept] || new Set([d.dept]);
 
                   return (
                     <Fragment key={d.dept}>
@@ -297,6 +301,9 @@ export default function AdminNaverCalendarsPage() {
                             <CalendarDays size={15} color={d.isCreated ? 'var(--green)' : 'var(--text-3)'} />
                             <span>{d.dept}</span>
                           </div>
+                          <div style={{ color: 'var(--text-3)', fontSize: 11, fontWeight: 400, marginTop: 4 }}>
+                            휴가 표시: {Array.from(selectedSources).join(', ')}
+                          </div>
                         </td>
                         <td>
                           <span className={`badge ${d.isCreated ? 'green' : 'gray'}`}>
@@ -334,7 +341,7 @@ export default function AdminNaverCalendarsPage() {
                               }}
                             >
                               <Check size={13} />
-                              {d.isCreated ? '멤버 저장' : '캘린더 생성'}
+                              {d.isCreated ? '설정 저장' : '캘린더 생성'}
                             </button>
 
                             {d.isCreated && (
@@ -391,6 +398,28 @@ export default function AdminNaverCalendarsPage() {
                       <tr key={`${d.dept}-sub`} style={{ background: 'var(--bg-card-2)' }}>
                         <td colSpan={6} style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <fieldset disabled={isSaving} style={{ margin: 0, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--bg-card)' }}>
+                              <legend style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', padding: '0 4px' }}>휴가를 함께 표시할 조직</legend>
+                              <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-3)' }}>
+                                본인 조직은 기본 포함됩니다. 하위조직·상위조직도 필요한 곳만 선택한 뒤 설정을 저장하세요.
+                                선택한 조직의 휴가가 이 캘린더에 표시되며, 열람 권한은 아래 팀원 설정을 따릅니다.
+                              </p>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px' }}>
+                                {departments.map((source) => (
+                                  <label key={source.dept} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', cursor: 'pointer' }}>
+                                    <input type="checkbox" aria-label={`${d.dept}에 ${source.dept} 휴가 표시`}
+                                      checked={selectedSources.has(source.dept)} disabled={source.dept === d.dept}
+                                      onChange={() => setSourceDeptMap((prev) => {
+                                        const next = new Set(prev[d.dept] || [d.dept]);
+                                        if (next.has(source.dept)) next.delete(source.dept); else next.add(source.dept);
+                                        return { ...prev, [d.dept]: next };
+                                      })}
+                                      style={{ accentColor: 'var(--blue)' }} />
+                                    {source.dept}{source.dept === d.dept ? ' (기본)' : ''}
+                                  </label>
+                                ))}
+                              </div>
+                            </fieldset>
                             <div
                               style={{
                                 display: 'flex',
@@ -430,7 +459,7 @@ export default function AdminNaverCalendarsPage() {
                                   }}
                                 >
                                   <Check size={12} />
-                                  {d.isCreated ? '멤버 설정 저장' : '캘린더 생성'}
+                                  {d.isCreated ? '설정 저장' : '캘린더 생성'}
                                 </button>
                               </div>
                             </div>
@@ -480,6 +509,8 @@ export default function AdminNaverCalendarsPage() {
                                           </td>
                                           <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--text-1)' }}>
                                             {emp.name}
+                                            {emp.isConcurrent && <span className="badge gray" style={{ marginLeft: 6 }} title={`주 소속: ${emp.primaryDept}`}>겸직</span>}
+                                            {emp.isConcurrent && <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-3)', marginTop: 3 }}>주 소속: {emp.primaryDept}</div>}
                                           </td>
                                           <td className="time-display" style={{ padding: '8px 12px', color: 'var(--text-2)' }}>
                                             {emp.empNo}

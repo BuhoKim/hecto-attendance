@@ -9,6 +9,10 @@ import {
   getLeaveLabel,
   buildLeaveEventPayload,
   parseLeaveKeyFromDescription,
+  normalizeCalendarSourceDepts,
+  buildCalendarDepartmentRoster,
+  parseCalendarMemberConfig,
+  calendarRosterExclusions,
 } from '../src/lib/naverCalendarRules.mjs';
 
 test('filterCalendarMembers는 퇴사자, 비활성 직원, 제외 지정된 사번을 필터링한다', () => {
@@ -54,8 +58,30 @@ test('validateCalendarConfigPayload는 부서명 누락 시 에러를 던지고 
   assert.deepEqual(validated, {
     dept: '경영지원팀',
     excludedEmpNos: ['20200002'],
+    sourceDepts: ['경영지원팀'],
     isActive: true,
   });
+});
+
+test('휴가 표시 조직은 소유 부서를 첫 번째로 유지하고 상하위 조직을 선택적으로 포함한다', () => {
+  assert.deepEqual(normalizeCalendarSourceDepts('경영지원실', ['경영지원팀', '경영지원실', '경영지원팀', '', null]), ['경영지원실', '경영지원팀']);
+  assert.deepEqual(normalizeCalendarSourceDepts('경영지원팀', ['경영지원실']), ['경영지원팀', '경영지원실']);
+  assert.deepEqual(normalizeCalendarSourceDepts('경영지원실'), ['경영지원실']);
+});
+
+test('MySQL 직원만 겸직 부서에 표시하고 명시적으로 포함하기 전에는 권한에서 제외한다', () => {
+  const employees = [{ emp_no: '1', name: '임원', dept: '경영지원실', email: 'one@example.com' }];
+  const unit = { primary: false, orgUnitName: '경영지원팀' };
+  const users = [
+    { email: 'one@example.com', domainId: 1, organizations: [{ domainId: 1, orgUnits: [unit, unit] }] },
+    { email: 'freelancer@example.com', domainId: 1, organizations: [{ domainId: 1, orgUnits: [unit] }] },
+  ];
+  const roster = buildCalendarDepartmentRoster(employees, users);
+  assert.equal(roster.length, 2);
+  assert.equal(roster[1].isConcurrent, true);
+  assert.equal(roster[1].primaryDept, '경영지원실');
+  assert.deepEqual(calendarRosterExclusions(roster.filter((e) => e.dept === '경영지원팀'), parseCalendarMemberConfig('[]')), ['1']);
+  assert.deepEqual(calendarRosterExclusions(roster, parseCalendarMemberConfig({ excludedEmpNos: [], includedConcurrentEmpNos: ['1'] })), []);
 });
 
 test('formatCalendarDate는 8자리 YYYYMMDD를 YYYY-MM-DD로 포맷팅한다', () => {

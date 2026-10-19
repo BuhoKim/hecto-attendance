@@ -7,12 +7,18 @@ import {
   deleteNaverCalendar,
   syncDepartmentCalendarEvents,
   isNaverWorksConfigured,
+  getAccessToken,
 } from '@/lib/naverWorks';
 import {
   filterCalendarMembers,
   buildNaverCalendarMembersPayload,
   validateCalendarConfigPayload,
+  normalizeCalendarSourceDepts,
+  buildCalendarDepartmentRoster,
+  parseCalendarMemberConfig,
+  calendarRosterExclusions,
 } from '@/lib/naverCalendarRules.mjs';
+import { getCalendarDirectoryUsers } from '@/lib/naverCalendarDirectory.mjs';
 
 const CALENDAR_SCOPE = 'naver-works-calendar';
 
@@ -47,8 +53,11 @@ export async function GET(request) {
     if (empRes.error) {
       return NextResponse.json({ error: `직원 목록 조회 실패: ${empRes.error.message}` }, { status: 500 });
     }
+    if (calRes.error) throw new Error(`캘린더 설정 조회 실패: ${calRes.error.message}`);
 
-    const employees = empRes.data || [];
+    const token = isNaverWorksConfigured() ? await getAccessToken() : null;
+    const users = token ? await getCalendarDirectoryUsers(token) : [];
+    const employees = buildCalendarDepartmentRoster(empRes.data || [], users);
     const calendarRecords = calRes.data || [];
 
     // 부서별 캘린더 매핑 (depts[0] 기준)
@@ -80,13 +89,12 @@ export async function GET(request) {
       if (calRecord) {
         calendarId = calRecord.token; // 네이버웍스 calendarId
         try {
-          if (calRecord.owner_emp_no && calRecord.owner_emp_no.startsWith('[')) {
-            excludedEmpNos = JSON.parse(calRecord.owner_emp_no);
-          }
+          excludedEmpNos = calendarRosterExclusions(allEmps, parseCalendarMemberConfig(calRecord.calendar_config || calRecord.owner_emp_no));
         } catch {
           excludedEmpNos = [];
         }
       }
+      if (!calRecord) excludedEmpNos = calendarRosterExclusions(allEmps, parseCalendarMemberConfig(null));
 
       return {
         dept,
@@ -96,6 +104,7 @@ export async function GET(request) {
         totalEmployees: allEmps.length,
         activeEmployees: activeEmps.length,
         excludedEmpNos,
+        sourceDepts: normalizeCalendarSourceDepts(dept, calRecord?.depts),
         employees: allEmps.map((e) => ({
           empNo: String(e.emp_no),
           name: e.name,
@@ -103,6 +112,8 @@ export async function GET(request) {
           isActive: e.is_active !== false && e.status !== 'resigned',
           status: e.status || (e.is_active ? 'active' : 'inactive'),
           isExcluded: excludedEmpNos.includes(String(e.emp_no)),
+          isConcurrent: e.isConcurrent,
+          primaryDept: e.primaryDept,
         })),
         updatedAt: calRecord?.updated_at || null,
       };
@@ -132,30 +143,37 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { dept, excludedEmpNos } = validateCalendarConfigPayload(body);
-    const action = body.action || 'save'; // 'save' | 'sync-events'
+    const { dept, excludedEmpNos, sourceDepts } = validateCalendarConfigPayload(body);
 
     const supabase = getAdminClient();
 
     // 1. 해당 부서의 활성 직원 조회 (MySQL 정직원 목록 기반)
     const { data: emps, error: empErr } = await supabase
       .from('sa_employees')
-      .select('emp_no, name, dept, email, status, is_active')
-      .eq('dept', dept);
+      .select('emp_no, name, dept, email, status, is_active');
 
     if (empErr) {
       return NextResponse.json({ error: `직원 조회 실패: ${empErr.message}` }, { status: 500 });
     }
+    const directoryUsers = await getCalendarDirectoryUsers(await getAccessToken());
+    const roster = buildCalendarDepartmentRoster(emps || [], directoryUsers);
+    const deptRoster = roster.filter((emp) => emp.dept === dept);
+    const includedConcurrentEmpNos = deptRoster.filter((emp) => emp.isConcurrent && !excludedEmpNos.includes(String(emp.emp_no))).map((emp) => String(emp.emp_no));
+    const knownDepts = new Set(roster.map((emp) => emp.dept));
+    if (sourceDepts.some((name) => !knownDepts.has(name))) {
+      return NextResponse.json({ error: '직원 명단에 없는 조직은 선택할 수 없습니다.' }, { status: 400 });
+    }
 
     // 2. 제외 사번을 반영한 실제 네이버웍스 등록 대상 필터링
-    const targetMembers = filterCalendarMembers(emps || [], excludedEmpNos);
+    const targetMembers = filterCalendarMembers(deptRoster, excludedEmpNos);
     const membersPayload = buildNaverCalendarMembersPayload(targetMembers);
 
     // 3. 기존 등록 캘린더 레코드 조회
-    const { data: existingRecords } = await supabase
+    const { data: existingRecords, error: configError } = await supabase
       .from('sa_ical_subscriptions')
       .select('*')
       .eq('scope', CALENDAR_SCOPE);
+    if (configError) throw new Error(`캘린더 설정 조회 실패: ${configError.message}`);
 
     const existing = (existingRecords || []).find((r) => r.depts?.[0] === dept);
 
@@ -164,21 +182,23 @@ export async function POST(request) {
 
     if (calendarId) {
       // 이미 캘린더가 존재하면 멤버 목록 업데이트
-      if (action !== 'sync-events') {
+      {
         await updateNaverCalendar(calendarId, {
           calendarName,
           members: membersPayload,
         });
 
         // DB 레코드 업데이트
-        await supabase
+        const { error: saveError } = await supabase
           .from('sa_ical_subscriptions')
           .update({
             label: calendarName,
-            owner_emp_no: JSON.stringify(excludedEmpNos),
+            depts: sourceDepts,
+            calendar_config: { excludedEmpNos, includedConcurrentEmpNos },
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id);
+        if (saveError) throw new Error(`설정 저장 실패: ${saveError.message}`);
       }
     } else {
       // 신규 생성
@@ -190,30 +210,35 @@ export async function POST(request) {
 
       calendarId = created.calendarId;
 
-      await supabase
+      const { error: saveError } = await supabase
         .from('sa_ical_subscriptions')
         .insert({
           token: calendarId,
           label: calendarName,
-          depts: [dept],
+          depts: sourceDepts,
           scope: CALENDAR_SCOPE,
-          owner_emp_no: JSON.stringify(excludedEmpNos),
+          calendar_config: { excludedEmpNos, includedConcurrentEmpNos },
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
+      if (saveError) throw new Error(`설정 저장 실패: ${saveError.message}`);
     }
 
     // 4. 연차 일정 자동 동기화
     let syncResult = null;
+    let syncError = null;
     try {
       syncResult = await syncDepartmentCalendarEvents({
         calendarId,
         dept,
+        sourceDepts,
+        additionalEmpNos: includedConcurrentEmpNos,
         excludedEmpNos,
         supabase,
       });
     } catch (syncErr) {
+      syncError = syncErr.message;
       console.warn('[Calendar Event Sync Warning]', syncErr.message);
     }
 
@@ -224,6 +249,7 @@ export async function POST(request) {
       includedCount: targetMembers.length,
       excludedCount: excludedEmpNos.length,
       syncResult,
+      syncError,
     });
   } catch (err) {
     console.error('[Admin Naver Calendars POST Error]', err);

@@ -207,6 +207,7 @@ CREATE TABLE IF NOT EXISTS SA_ical_subscriptions (
   depts       JSONB NOT NULL DEFAULT '[]'::jsonb,
     scope       VARCHAR(50) NOT NULL DEFAULT 'leave-calendar',
     owner_emp_no VARCHAR(20),
+    calendar_config JSONB,
   is_active   BOOLEAN NOT NULL DEFAULT TRUE,
   created_by  UUID REFERENCES auth.users(id),
   created_at  TIMESTAMPTZ DEFAULT NOW(),

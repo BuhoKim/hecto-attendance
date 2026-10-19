@@ -92,8 +92,51 @@ export function validateCalendarConfigPayload(payload = {}) {
   return {
     dept,
     excludedEmpNos,
+    sourceDepts: normalizeCalendarSourceDepts(dept, payload.sourceDepts),
     isActive: payload.isActive !== false,
   };
+}
+
+// depts[0] is always the calendar's owning department; the rest are optional
+// leave sources. Selecting sources never grants their staff calendar access.
+export function normalizeCalendarSourceDepts(dept, sourceDepts = []) {
+  return [...new Set([dept, ...(Array.isArray(sourceDepts) ? sourceDepts : [])]
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.trim()).filter(Boolean))];
+}
+
+export function parseCalendarMemberConfig(value) {
+  const config = typeof value === 'string' ? JSON.parse(value) : value || [];
+  return Array.isArray(config)
+    ? { excludedEmpNos: config.map(String), includedConcurrentEmpNos: [] }
+    : { excludedEmpNos: (config.excludedEmpNos || []).map(String), includedConcurrentEmpNos: (config.includedConcurrentEmpNos || []).map(String) };
+}
+
+export function buildCalendarDepartmentRoster(employees = [], users = []) {
+  const byEmail = new Map(users.map((user) => [String(user.email || '').trim().toLowerCase(), user]));
+  const byNumber = new Map(users.filter((user) => user.employeeNumber).map((user) => [String(user.employeeNumber).trim(), user]));
+  const roster = [];
+  for (const emp of employees) {
+    roster.push({ ...emp, primaryDept: emp.dept, isConcurrent: false });
+    const user = byEmail.get(String(emp.email || '').trim().toLowerCase()) || byNumber.get(String(emp.emp_no).trim());
+    if (!user) continue;
+    const seen = new Set([emp.dept]);
+    for (const org of user.organizations || []) {
+      if (org.domainId !== user.domainId) continue;
+      for (const unit of org.orgUnits || []) {
+        if (unit.primary !== false || !unit.orgUnitName || seen.has(unit.orgUnitName)) continue;
+        seen.add(unit.orgUnitName);
+        roster.push({ ...emp, dept: unit.orgUnitName, primaryDept: emp.dept, isConcurrent: true });
+      }
+    }
+  }
+  return roster;
+}
+
+export function calendarRosterExclusions(roster, config) {
+  return [...new Set([...config.excludedEmpNos, ...roster
+    .filter((emp) => emp.isConcurrent && !config.includedConcurrentEmpNos.includes(String(emp.emp_no)))
+    .map((emp) => String(emp.emp_no))])];
 }
 
 /**
