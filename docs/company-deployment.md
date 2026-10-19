@@ -8,12 +8,14 @@
 ```powershell
 git config --local user.name BuhoKim
 git config --local user.email bhkim@hecto.co.kr
-git config --local credential.useHttpPath true
+git config --local credential.https://github.com.useHttpPath false
 git config --local credential.https://github.com.username BuhoKim
 git remote set-url origin https://BuhoKim@github.com/BuhoKim/hecto-attendance.git
 ```
 
 Git 인증은 Git Credential Manager에서 회사 계정으로 별도 승인합니다.
+GitHub 기기 인증으로 저장한 계정은 호스트 기준으로 찾으며, remote의 `BuhoKim@`
+및 `credential.username`으로 회사 계정을 지정합니다. 개인 계정은 별도 계정으로 유지됩니다.
 커밋 작성자 설정과 원격 저장소 인증은 별개이므로 두 항목을 모두 확인합니다.
 기존 커밋의 작성자는 바꾸지 않습니다.
 
