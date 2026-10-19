@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Fragment } from 'react';
 import {
   CalendarDays,
   Check,
@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Search,
+  Users,
 } from 'lucide-react';
 import EmployeeAdminShell from '../employees/EmployeeAdminShell';
 
@@ -27,7 +28,10 @@ export default function AdminNaverCalendarsPage() {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/admin/naver-calendars');
+      const res = await fetch(`/api/admin/naver-calendars?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || '조회 실패');
@@ -58,16 +62,17 @@ export default function AdminNaverCalendarsPage() {
     return departments.filter(
       (d) =>
         d.dept.toLowerCase().includes(q) ||
-        d.employees.some((e) => e.name.toLowerCase().includes(q) || e.empNo.includes(q))
+        d.employees.some((e) => e.name.toLowerCase().includes(q) || String(e.empNo).includes(q))
     );
   }, [departments, search]);
 
   const toggleExclude = (dept, empNo) => {
     const curSet = new Set(excludedMap[dept] || []);
-    if (curSet.has(empNo)) {
-      curSet.delete(empNo);
+    const strNo = String(empNo);
+    if (curSet.has(strNo)) {
+      curSet.delete(strNo);
     } else {
-      curSet.add(empNo);
+      curSet.add(strNo);
     }
     setExcludedMap((prev) => ({ ...prev, [dept]: curSet }));
   };
@@ -138,7 +143,6 @@ export default function AdminNaverCalendarsPage() {
 
   const totalDepts = departments.length;
   const createdDepts = departments.filter((d) => d.isCreated).length;
-  const totalExcluded = Object.values(excludedMap).reduce((acc, set) => acc + set.size, 0);
 
   return (
     <EmployeeAdminShell
@@ -152,26 +156,36 @@ export default function AdminNaverCalendarsPage() {
           className="card-header"
           style={{
             borderBottom: '1px solid var(--border)',
-            padding: '16px 18px',
+            padding: '14px 18px',
             alignItems: 'center',
+            justifyContent: 'space-between',
             gap: 12,
             flexWrap: 'wrap',
           }}
         >
-          <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
+          <div style={{ position: 'relative', flex: 1, maxWidth: 360, minWidth: 220 }}>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="부서명 또는 직원 이름 검색..."
               className="search-input"
+              style={{ width: '100%', paddingLeft: 34 }}
             />
-            <Search size={14} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-2)' }} />
+            <Search
+              size={14}
+              style={{
+                position: 'absolute',
+                left: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-3)',
+              }}
+            />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span className="badge blue">전체 {totalDepts}개 부서</span>
             <span className="badge green">생성 완료 {createdDepts}</span>
-            {totalExcluded > 0 && <span className="badge amber">권한 제외 {totalExcluded}명</span>}
             <button
               type="button"
               onClick={fetchStatus}
@@ -179,7 +193,7 @@ export default function AdminNaverCalendarsPage() {
               className="login-btn"
               style={{
                 marginTop: 0,
-                padding: '8px 13px',
+                padding: '7px 12px',
                 background: 'var(--bg-card-2)',
                 color: 'var(--text-1)',
                 border: '1px solid var(--border)',
@@ -191,12 +205,13 @@ export default function AdminNaverCalendarsPage() {
                 gap: 5,
               }}
             >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> 새로고침
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              새로고침
             </button>
           </div>
         </div>
 
-        {/* 안내 메시지 */}
+        {/* 상태 알림 메시지 */}
         {message && (
           <div
             style={{
@@ -204,13 +219,12 @@ export default function AdminNaverCalendarsPage() {
               padding: '10px 14px',
               borderRadius: 'var(--r-sm)',
               fontSize: 13,
-              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              background: message.type === 'error' ? 'rgba(208, 107, 107, 0.12)' : 'rgba(95, 169, 113, 0.12)',
+              background: message.type === 'error' ? 'rgba(208, 107, 107, 0.12)' : 'rgba(56, 161, 105, 0.12)',
               color: message.type === 'error' ? 'var(--red)' : 'var(--green)',
-              border: `1px solid ${message.type === 'error' ? 'rgba(208, 107, 107, 0.25)' : 'rgba(95, 169, 113, 0.25)'}`,
+              border: `1px solid ${message.type === 'error' ? 'rgba(208, 107, 107, 0.25)' : 'rgba(56, 161, 105, 0.25)'}`,
             }}
           >
             {message.type === 'error' ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}
@@ -220,24 +234,20 @@ export default function AdminNaverCalendarsPage() {
 
         {/* 부서 목록 테이블 */}
         <div className="table-wrapper" style={{ margin: '14px 18px 18px' }}>
-          {loading ? (
+          {loading && departments.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-2)' }}>
               네이버웍스 캘린더 정보를 불러오는 중입니다...
             </div>
-          ) : filteredDepts.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-2)' }}>
-              검색 조건에 맞는 부서가 없습니다.
-            </div>
           ) : (
-            <table className="table" style={{ width: '100%' }}>
+            <table className="table">
               <thead>
                 <tr>
-                  <th style={{ width: 36 }}></th>
-                  <th>부서명</th>
-                  <th>캘린더 상태</th>
-                  <th>구성원 현황</th>
-                  <th>캘린더 ID</th>
-                  <th style={{ textAlign: 'right' }}>관리</th>
+                  <th style={{ width: 44, textAlign: 'center' }}></th>
+                  <th style={{ width: 180 }}>부서명</th>
+                  <th style={{ width: 110 }}>캘린더 상태</th>
+                  <th style={{ width: 220 }}>구성원 현황</th>
+                  <th style={{ width: 150 }}>캘린더 ID</th>
+                  <th style={{ textAlign: 'right', width: 260 }}>관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -245,74 +255,95 @@ export default function AdminNaverCalendarsPage() {
                   const isExpanded = expandedDept === d.dept;
                   const excludedSet = excludedMap[d.dept] || new Set();
                   const includedCount = d.employees.filter(
-                    (e) => e.isActive && !excludedSet.has(e.empNo)
+                    (e) => e.isActive && !excludedSet.has(String(e.empNo))
                   ).length;
                   const isSaving = savingDept === d.dept;
 
                   return (
-                    <tr
-                      key={d.dept}
-                      onClick={() => setExpandedDept(isExpanded ? null : d.dept)}
-                      style={{
-                        cursor: 'pointer',
-                        background: isExpanded ? 'var(--row-hover)' : 'transparent',
-                      }}
-                    >
-                      <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
-                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      </td>
-                      <td style={{ fontWeight: 800, color: 'var(--text-1)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <CalendarDays size={15} color={d.isCreated ? 'var(--green)' : 'var(--text-3)'} />
-                          <span>{d.dept}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`badge ${d.isCreated ? 'green' : 'gray'}`}>
-                          {d.isCreated ? '생성완료' : '미생성'}
-                        </span>
-                      </td>
-                      <td style={{ color: 'var(--text-2)', fontSize: 13 }}>
-                        <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{includedCount}명</span> 포함
-                        {excludedSet.size > 0 && (
-                          <span style={{ color: 'var(--amber)', marginLeft: 6 }}>({excludedSet.size}명 제외)</span>
-                        )}
-                        <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>/ 총 {d.activeEmployees}명</span>
-                      </td>
-                      <td className="time-display" style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                        {d.calendarId ? `${d.calendarId.slice(0, 8)}...` : '-'}
-                      </td>
-                      <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                    <Fragment key={d.dept}>
+                      <tr
+                        onClick={() => setExpandedDept(isExpanded ? null : d.dept)}
+                        style={{
+                          cursor: 'pointer',
+                          background: isExpanded ? 'var(--row-hover)' : 'transparent',
+                        }}
+                      >
+                        <td style={{ textAlign: 'center' }}>
                           <button
                             type="button"
-                            onClick={() => handleSaveCalendar(d.dept, 'save')}
-                            disabled={isSaving}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedDept(isExpanded ? null : d.dept);
+                            }}
+                            title={isExpanded ? '팀원 목록 접기' : '팀원 목록 펼치기'}
+                            aria-expanded={isExpanded}
                             style={{
-                              padding: '5px 11px',
+                              background: isExpanded ? 'rgba(52, 95, 158, 0.15)' : 'transparent',
+                              border: isExpanded ? '1px solid var(--border)' : '1px solid transparent',
                               borderRadius: 'var(--r-sm)',
-                              background: d.isCreated ? 'var(--bg-card-2)' : 'var(--blue)',
-                              color: d.isCreated ? 'var(--text-1)' : '#fff',
-                              border: d.isCreated ? '1px solid var(--border)' : 'none',
-                              fontSize: 12,
-                              fontWeight: 700,
-                              cursor: isSaving ? 'not-allowed' : 'pointer',
+                              padding: '4px 6px',
+                              cursor: 'pointer',
+                              color: isExpanded ? 'var(--blue)' : 'var(--text-3)',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 4,
+                              justifyContent: 'center',
                             }}
                           >
-                            <Check size={13} />
-                            {d.isCreated ? '멤버 저장' : '캘린더 생성'}
+                            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           </button>
-
-                          {d.isCreated && (
+                        </td>
+                        <td style={{ fontWeight: 800, color: 'var(--text-1)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <CalendarDays size={15} color={d.isCreated ? 'var(--green)' : 'var(--text-3)'} />
+                            <span>{d.dept}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge ${d.isCreated ? 'green' : 'gray'}`}>
+                            {d.isCreated ? '생성완료' : '미생성'}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--text-2)', fontSize: 13 }}>
+                          <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{includedCount}명</span> 포함
+                          {excludedSet.size > 0 && (
+                            <span style={{ color: 'var(--amber)', marginLeft: 6 }}>({excludedSet.size}명 제외)</span>
+                          )}
+                          <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>/ 총 {d.activeEmployees}명</span>
+                        </td>
+                        <td className="time-display" style={{ color: 'var(--text-3)', fontSize: 12 }}>
+                          {d.calendarId ? `${d.calendarId.slice(0, 8)}...` : '-'}
+                        </td>
+                        <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                          <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
                             <button
                               type="button"
-                              onClick={() => handleSaveCalendar(d.dept, 'sync-events')}
+                              onClick={() => handleSaveCalendar(d.dept, 'save')}
                               disabled={isSaving}
-                              title="최근 승인 연차 일정을 네이버웍스 캘린더에 즉시 동기화합니다"
                               style={{
+                                padding: '5px 11px',
+                                borderRadius: 'var(--r-sm)',
+                                background: d.isCreated ? 'var(--bg-card-2)' : 'var(--blue)',
+                                color: d.isCreated ? 'var(--text-1)' : '#fff',
+                                border: d.isCreated ? '1px solid var(--border)' : 'none',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: isSaving ? 'not-allowed' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                            >
+                              <Check size={13} />
+                              {d.isCreated ? '멤버 저장' : '캘린더 생성'}
+                            </button>
+
+                            {d.isCreated && (
+                              <button
+                                type="button"
+                                onClick={() => handleSaveCalendar(d.dept, 'sync-events')}
+                                disabled={isSaving}
+                                title="최근 승인 연차 일정을 네이버웍스 캘린더에 즉시 동기화합니다"
+                                style={{
                                 padding: '5px 10px',
                                 borderRadius: 'var(--r-sm)',
                                 background: 'var(--bg-card-2)',
@@ -354,103 +385,132 @@ export default function AdminNaverCalendarsPage() {
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
 
-        {/* 펼쳐진 부서의 구성원 제외 설정 패널 */}
-        {expandedDept && (() => {
-          const d = departments.find((dept) => dept.dept === expandedDept);
-          if (!d) return null;
-          const excludedSet = excludedMap[d.dept] || new Set();
+                    {/* 바로 아래 펼쳐지는 부서 팀원 명단 서브 행 */}
+                    {isExpanded && (
+                      <tr key={`${d.dept}-sub`} style={{ background: 'var(--bg-card-2)' }}>
+                        <td colSpan={6} style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: 8,
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                                <Users size={15} color="var(--blue)" />
+                                <span>[{d.dept}] 팀원 명단 (총 {d.employees.length}명)</span>
+                                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)' }}>
+                                  — 체크 시 캘린더 멤버 및 일정 동기화에서 제외됩니다.
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                                  ※ 프리랜서는 정직원 명단에 없어 자동 제외됩니다.
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveCalendar(d.dept, 'save')}
+                                  disabled={isSaving}
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: 'var(--r-sm)',
+                                    background: 'var(--blue)',
+                                    color: '#fff',
+                                    border: 'none',
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                  }}
+                                >
+                                  <Check size={12} />
+                                  {d.isCreated ? '멤버 설정 저장' : '캘린더 생성'}
+                                </button>
+                              </div>
+                            </div>
 
-          return (
-            <div
-              style={{
-                margin: '0 18px 18px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--r-md)',
-                background: 'var(--bg-card-2)',
-                padding: '14px 18px',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 10,
-                  flexWrap: 'wrap',
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
-                  <span>[{d.dept}] 구성원 상세 설정</span>
-                  <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)' }}>
-                    (체크 시 캘린더 멤버 및 일정 동기화에서 제외)
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                  ※ 프리랜서는 MySQL 정직원 명단에 없으므로 자동 제외됩니다.
-                </div>
-              </div>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', textAlign: 'left' }}>
-                      <th style={{ padding: '6px 10px', width: 90 }}>권한 제외</th>
-                      <th style={{ padding: '6px 10px' }}>이름</th>
-                      <th style={{ padding: '6px 10px' }}>사번</th>
-                      <th style={{ padding: '6px 10px' }}>네이버웍스 이메일</th>
-                      <th style={{ padding: '6px 10px' }}>재직상태</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.employees.map((emp) => {
-                      const isExcluded = excludedSet.has(emp.empNo);
-                      return (
-                        <tr
-                          key={emp.empNo}
-                          style={{
-                            borderBottom: '1px solid var(--border-row)',
-                            background: isExcluded ? 'rgba(208, 107, 107, 0.05)' : 'transparent',
-                          }}
-                        >
-                          <td style={{ padding: '8px 10px' }}>
-                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-                              <input
-                                type="checkbox"
-                                checked={isExcluded}
-                                onChange={() => toggleExclude(d.dept, emp.empNo)}
-                                style={{ cursor: 'pointer' }}
-                              />
-                              <span style={{ color: isExcluded ? 'var(--red)' : 'var(--text-3)', fontWeight: isExcluded ? 700 : 400 }}>
-                                {isExcluded ? '제외됨' : '포함'}
-                              </span>
-                            </label>
-                          </td>
-                          <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--text-1)' }}>{emp.name}</td>
-                          <td className="time-display" style={{ padding: '8px 10px', color: 'var(--text-2)' }}>{emp.empNo}</td>
-                          <td style={{ padding: '8px 10px', color: 'var(--text-2)' }}>{emp.email || '-'}</td>
-                          <td style={{ padding: '8px 10px' }}>
-                            <span className={`badge ${emp.isActive ? 'green' : 'resigned'}`}>
-                              {emp.isActive ? '재직' : '퇴사/비활성'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })()}
+                            {d.employees.length === 0 ? (
+                              <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+                                소속된 정직원이 없습니다.
+                              </div>
+                            ) : (
+                              <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--bg-card)' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-card-2)', color: 'var(--text-3)', textAlign: 'left' }}>
+                                      <th style={{ padding: '7px 12px', width: 100 }}>동기화 권한</th>
+                                      <th style={{ padding: '7px 12px', width: 140 }}>이름</th>
+                                      <th style={{ padding: '7px 12px', width: 120 }}>사번</th>
+                                      <th style={{ padding: '7px 12px' }}>네이버웍스 계정(이메일)</th>
+                                      <th style={{ padding: '7px 12px', width: 110 }}>재직상태</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {d.employees.map((emp) => {
+                                      const isExcluded = excludedSet.has(String(emp.empNo));
+                                      return (
+                                        <tr
+                                          key={emp.empNo}
+                                          style={{
+                                            borderBottom: '1px solid var(--border-row)',
+                                            background: isExcluded ? 'rgba(208, 107, 107, 0.06)' : 'transparent',
+                                          }}
+                                        >
+                                          <td style={{ padding: '8px 12px' }}>
+                                            <label
+                                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={isExcluded}
+                                                onChange={() => toggleExclude(d.dept, emp.empNo)}
+                                                style={{ cursor: 'pointer', accentColor: 'var(--red)' }}
+                                              />
+                                              <span style={{ color: isExcluded ? 'var(--red)' : 'var(--text-2)', fontWeight: isExcluded ? 700 : 400 }}>
+                                                {isExcluded ? '제외됨' : '포함'}
+                                              </span>
+                                            </label>
+                                          </td>
+                                          <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--text-1)' }}>
+                                            {emp.name}
+                                          </td>
+                                          <td className="time-display" style={{ padding: '8px 12px', color: 'var(--text-2)' }}>
+                                            {emp.empNo}
+                                          </td>
+                                          <td style={{ padding: '8px 12px', color: emp.email ? 'var(--text-2)' : 'var(--text-3)' }}>
+                                            {emp.email || '(이메일 미등록)'}
+                                          </td>
+                                          <td style={{ padding: '8px 12px' }}>
+                                            <span className={`badge ${emp.isActive ? 'green' : 'resigned'}`}>
+                                              {emp.isActive ? '재직' : '퇴사/비활성'}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
-    </EmployeeAdminShell>
+    </div>
+  </EmployeeAdminShell>
   );
 }
