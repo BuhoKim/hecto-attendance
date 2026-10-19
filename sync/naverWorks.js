@@ -403,7 +403,8 @@ async function syncDepartmentCalendars(supabase) {
       if (empError) throw new Error(empError.message);
       const roster = buildCalendarDepartmentRoster(employees || [], users).filter((emp) => emp.dept === dept);
       const excludedEmpNos = calendarRosterExclusions(roster, config);
-      const members = buildNaverCalendarMembersPayload(filterCalendarMembers(roster, excludedEmpNos));
+      const extraMembers = (employees || []).filter((emp) => config.extraLeaveEmpNos.includes(String(emp.emp_no)));
+      const members = buildNaverCalendarMembersPayload(filterCalendarMembers([...roster, ...extraMembers], excludedEmpNos));
       const response = await fetch(`https://www.worksapis.com/v1.0/calendars/${encodeURIComponent(cal.token)}`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ members }),

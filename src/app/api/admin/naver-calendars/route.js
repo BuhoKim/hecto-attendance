@@ -173,7 +173,9 @@ export async function POST(request) {
     }
 
     // 2. 제외 사번을 반영한 실제 네이버웍스 등록 대상 필터링
-    const targetMembers = filterCalendarMembers(deptRoster, excludedEmpNos);
+    // Individually added staff also get read access (two-way sharing).
+    const extraMembers = (emps || []).filter((emp) => extraLeaveEmpNos.includes(String(emp.emp_no)));
+    const targetMembers = filterCalendarMembers([...deptRoster, ...extraMembers], excludedEmpNos);
     const membersPayload = buildNaverCalendarMembersPayload(targetMembers);
 
     // 3. 기존 등록 캘린더 레코드 조회

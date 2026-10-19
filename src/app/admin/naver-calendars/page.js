@@ -427,7 +427,7 @@ export default function AdminNaverCalendarsPage() {
                             <fieldset disabled={isSaving} style={{ margin: 0, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--bg-card)' }}>
                               <legend style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', padding: '0 4px' }}>휴가를 함께 표시할 직원</legend>
                               <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-3)' }}>
-                                다른 부서 직원을 검색해 추가하면 그 직원의 휴가가 이 캘린더에 표시됩니다. 추가한 직원에게 캘린더 열람 권한은 주어지지 않습니다.
+                                다른 부서 직원을 검색해 추가하면 그 직원의 휴가가 이 캘린더에 표시되고, 그 직원도 이 캘린더를 볼 수 있습니다.
                               </p>
                               <div style={{ position: 'relative', maxWidth: 360 }}>
                                 <input
