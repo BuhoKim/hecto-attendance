@@ -9,6 +9,7 @@ import {
   getLeaveLabel,
   buildLeaveEventPayload,
   parseLeaveKeyFromDescription,
+  getManagedEventKey,
   normalizeCalendarSourceDepts,
   buildCalendarDepartmentRoster,
   parseCalendarMemberConfig,
@@ -126,6 +127,9 @@ test('buildLeaveEventPayload는 RFC 5545 종일 일정 규격에 맞춰 end.date
   assert.equal(payload.eventComponents[0].end.date, '2026-09-18');
   assert.match(payload.eventComponents[0].description, /기간: 2026-09-14 ~ 2026-09-17/);
 
-  const parsedKey = parseLeaveKeyFromDescription(payload.eventComponents[0].description);
-  assert.equal(parsedKey, '2024001_2026-09-14_12');
+  // 설명에는 키를 노출하지 않고, 제목+시작일로 연동 일정을 식별한다.
+  assert.doesNotMatch(payload.eventComponents[0].description, /\[KEY:/);
+  assert.equal(getManagedEventKey(payload.eventComponents[0]), '김부호 · 연차|2026-09-14');
+  assert.equal(getManagedEventKey({ summary: '팀 회의', description: '수동 일정', start: { date: '2026-09-14' } }), null);
+  assert.equal(parseLeaveKeyFromDescription('[KEY: 2024001_2026-09-14_12]'), '2024001_2026-09-14_12');
 });

@@ -206,7 +206,6 @@ export function buildLeaveEventPayload({ empNo, empName, dept, leave }) {
     `휴가종류: ${label}`,
     `기간: ${startDate} ~ ${rawEndDate}`,
     `일수: ${leave.leave_days || 1}일`,
-    `[KEY: ${leaveKey}]`,
   ].join('\n');
 
   return {
@@ -225,8 +224,21 @@ export function buildLeaveEventPayload({ empNo, empName, dept, leave }) {
   };
 }
 
+const MANAGED_DESCRIPTION = /^이름: .*\n부서: .*\n휴가종류: /;
+
 /**
- * 이벤트 설명에서 고유 leaveKey 파싱
+ * 연동이 만든 일정의 비교 키 (제목 + 시작일). 수동 일정은 null.
+ * 설명에 키를 노출하지 않으므로 일정 내용으로 식별한다.
+ */
+export function getManagedEventKey(component = {}) {
+  const description = component.description || '';
+  if (!MANAGED_DESCRIPTION.test(description) && !/\[KEY:/.test(description)) return null;
+  const start = component.start?.date || String(component.start?.dateTime || '').slice(0, 10);
+  return component.summary && start ? `${component.summary}|${start}` : null;
+}
+
+/**
+ * 이벤트 설명에서 고유 leaveKey 파싱 (구버전 일정 호환)
  */
 export function parseLeaveKeyFromDescription(description = '') {
   if (!description) return null;

@@ -1,4 +1,4 @@
-import { buildLeaveEventPayload, filterCalendarMembers, normalizeCalendarSourceDepts, parseLeaveKeyFromDescription } from './naverCalendarRules.mjs';
+import { buildLeaveEventPayload, filterCalendarMembers, getManagedEventKey, normalizeCalendarSourceDepts } from './naverCalendarRules.mjs';
 
 // Shared by the admin API and the CommonJS worker, so both honor saved sources.
 export async function syncCalendarLeaveSources({ calendarId, dept, sourceDepts, additionalEmpNos = [], excludedEmpNos = [], supabase, token, serviceAccount, labels = {}, fetchImpl = fetch, now = new Date() }) {
@@ -31,13 +31,13 @@ export async function syncCalendarLeaveSources({ calendarId, dept, sourceDepts, 
   for (const leave of leaves) {
     const emp = empMap.get(String(leave.emp_no).trim());
     if (!emp) continue;
-    const { leaveKey, ...payload } = buildLeaveEventPayload({ empNo: emp.empNo, empName: leave.emp_name || emp.name, dept: emp.dept, leave });
+    const { leaveKey: _leaveKey, ...payload } = buildLeaveEventPayload({ empNo: emp.empNo, empName: leave.emp_name || emp.name, dept: emp.dept, leave });
     const label = labels[String(leave.leave_code || '').trim()];
     if (label) {
       payload.eventComponents[0].summary = `${leave.emp_name || emp.name} · ${label}`;
       payload.eventComponents[0].description = payload.eventComponents[0].description.replace(/^휴가종류: .*$/m, `휴가종류: ${label}`);
     }
-    desired.set(leaveKey, payload);
+    desired.set(getManagedEventKey(payload.eventComponents[0]), payload);
   }
 
   const baseUrl = `https://www.worksapis.com/v1.0/users/${encodeURIComponent(serviceAccount)}/calendars/${encodeURIComponent(calendarId)}/events`;
@@ -56,7 +56,7 @@ export async function syncCalendarLeaveSources({ calendarId, dept, sourceDepts, 
       // This integration creates one non-recurring component per managed event.
       if (components.length !== 1 || components[0].recurrence?.length) continue;
       const component = components[0];
-      const key = parseLeaveKeyFromDescription(component.description);
+      const key = getManagedEventKey(component);
       if (key && component.eventId) existing.set(component.eventId, { key, component });
     }
   }
