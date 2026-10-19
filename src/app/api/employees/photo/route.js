@@ -9,7 +9,7 @@ export async function GET(request) {
   if (!session) return new NextResponse(null, { status: 401 });
 
   const empNo = new URL(request.url).searchParams.get('empNo');
-  const notFound = (reason) => new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'no-store', 'X-Photo-Reason': reason } });
+  const notFound = (reason) => (console.warn('[Employee photo] miss', reason), new NextResponse)(null, { status: 404, headers: { 'Cache-Control': 'no-store', 'X-Photo-Reason': reason } });
   if (!empNo) return notFound('emp_no');
   if (!isNaverWorksConfigured()) return notFound('config');
 
