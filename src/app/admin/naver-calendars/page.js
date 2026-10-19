@@ -8,7 +8,6 @@ import {
   ChevronRight,
   RefreshCw,
   Trash2,
-  Users,
   AlertCircle,
   CheckCircle2,
   Search,
@@ -94,7 +93,7 @@ export default function AdminNaverCalendarsPage() {
       }
 
       const syncMsg = result.syncResult
-        ? ` (등록 일정: ${result.syncResult.created}건, 유지: ${result.syncResult.skipped}건)`
+        ? ` (등록: ${result.syncResult.created}건, 유지: ${result.syncResult.skipped}건)`
         : '';
 
       setMessage({
@@ -110,7 +109,7 @@ export default function AdminNaverCalendarsPage() {
   };
 
   const handleDeleteCalendar = async (dept) => {
-    if (!confirm(`[${dept}] 캘린더를 삭제하시겠습니까?\n네이버웍스에서도 캘린더가 제거됩니다.`)) {
+    if (!confirm(`[${dept}] 캘린더를 삭제하시겠습니까?\n네이버웍스에서도 공유 캘린더가 제거됩니다.`)) {
       return;
     }
 
@@ -137,425 +136,320 @@ export default function AdminNaverCalendarsPage() {
     }
   };
 
-  // 통계 계산
   const totalDepts = departments.length;
   const createdDepts = departments.filter((d) => d.isCreated).length;
-  const totalActiveEmps = departments.reduce((acc, d) => acc + d.activeEmployees, 0);
   const totalExcluded = Object.values(excludedMap).reduce((acc, set) => acc + set.size, 0);
 
   return (
     <EmployeeAdminShell
       title="네이버웍스 캘린더 관리"
-      subtitle="MySQL 정직원 명단을 기반으로 부서별 캘린더를 생성하고 특정 인원 권한 및 연차 일정을 자동 관리합니다."
+      subtitle="MySQL 정직원 명단을 기반으로 부서별 공유 캘린더를 생성하고 인원별 권한 및 연차 일정을 자동 연동합니다."
       activeHref="/admin/naver-calendars"
     >
-      <div style={{ padding: '24px', maxWidth: '1280px', margin: '0 auto' }}>
-        {/* 상단 통계 카드 */}
+      <div className="card">
+        {/* 상단 툴바: 검색 및 통계 배지 */}
         <div
+          className="card-header"
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '16px',
-            marginBottom: '24px',
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--card-bg, #1e293b)',
-              border: '1px solid var(--border-color, #334155)',
-              borderRadius: '12px',
-              padding: '20px',
-            }}
-          >
-            <div style={{ fontSize: '13px', color: 'var(--text-muted, #94a3b8)' }}>전체 대상 부서</div>
-            <div style={{ fontSize: '26px', fontWeight: 'bold', marginTop: '8px', color: '#f8fafc' }}>
-              {totalDepts}
-              <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: '6px' }}>개 부서</span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--card-bg, #1e293b)',
-              border: '1px solid var(--border-color, #334155)',
-              borderRadius: '12px',
-              padding: '20px',
-            }}
-          >
-            <div style={{ fontSize: '13px', color: 'var(--text-muted, #94a3b8)' }}>캘린더 생성 완료</div>
-            <div style={{ fontSize: '26px', fontWeight: 'bold', marginTop: '8px', color: '#10b981' }}>
-              {createdDepts}
-              <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: '6px', color: '#94a3b8' }}>
-                / {totalDepts}
-              </span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--card-bg, #1e293b)',
-              border: '1px solid var(--border-color, #334155)',
-              borderRadius: '12px',
-              padding: '20px',
-            }}
-          >
-            <div style={{ fontSize: '13px', color: 'var(--text-muted, #94a3b8)' }}>동기화 정직원 수</div>
-            <div style={{ fontSize: '26px', fontWeight: 'bold', marginTop: '8px', color: '#38bdf8' }}>
-              {totalActiveEmps}
-              <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: '6px' }}>명 (프리랜서 제외)</span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: 'var(--card-bg, #1e293b)',
-              border: '1px solid var(--border-color, #334155)',
-              borderRadius: '12px',
-              padding: '20px',
-            }}
-          >
-            <div style={{ fontSize: '13px', color: 'var(--text-muted, #94a3b8)' }}>권한 제외 지정 인원</div>
-            <div style={{ fontSize: '26px', fontWeight: 'bold', marginTop: '8px', color: '#f59e0b' }}>
-              {totalExcluded}
-              <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: '6px' }}>명 (대표이사 등)</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 안내 메시지 및 필터 */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
+            borderBottom: '1px solid var(--border)',
+            padding: '16px 18px',
             alignItems: 'center',
-            marginBottom: '16px',
+            gap: 12,
             flexWrap: 'wrap',
-            gap: '12px',
           }}
         >
-          <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
-            <Search
-              size={18}
-              style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#64748b',
-              }}
-            />
+          <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
             <input
-              type="text"
-              placeholder="부서명 또는 직원 이름 검색..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px 10px 38px',
-                background: 'var(--input-bg, #0f172a)',
-                border: '1px solid var(--border-color, #334155)',
-                borderRadius: '8px',
-                color: '#f8fafc',
-                fontSize: '14px',
-              }}
+              placeholder="부서명 또는 직원 이름 검색..."
+              className="search-input"
             />
+            <Search size={14} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-2)' }} />
           </div>
 
-          <button
-            type="button"
-            onClick={fetchStatus}
-            disabled={loading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '10px 16px',
-              background: 'var(--button-secondary-bg, #334155)',
-              border: 'none',
-              borderRadius: '8px',
-              color: '#f8fafc',
-              fontSize: '14px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            <RefreshCw size={16} />
-            새로고침
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="badge blue">전체 {totalDepts}개 부서</span>
+            <span className="badge green">생성 완료 {createdDepts}</span>
+            {totalExcluded > 0 && <span className="badge amber">권한 제외 {totalExcluded}명</span>}
+            <button
+              type="button"
+              onClick={fetchStatus}
+              disabled={loading}
+              className="login-btn"
+              style={{
+                marginTop: 0,
+                padding: '8px 13px',
+                background: 'var(--bg-card-2)',
+                color: 'var(--text-1)',
+                border: '1px solid var(--border)',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+              }}
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> 새로고침
+            </button>
+          </div>
         </div>
 
-        {/* 알림 메시지 */}
+        {/* 안내 메시지 */}
         {message && (
           <div
             style={{
+              margin: '14px 18px 0',
+              padding: '10px 14px',
+              borderRadius: 'var(--r-sm)',
+              fontSize: 13,
+              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              background: message.type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-              border: message.type === 'error' ? '1px solid #ef4444' : '1px solid #10b981',
-              color: message.type === 'error' ? '#fca5a5' : '#6ee7b7',
-              fontSize: '14px',
+              gap: 8,
+              background: message.type === 'error' ? 'rgba(208, 107, 107, 0.12)' : 'rgba(95, 169, 113, 0.12)',
+              color: message.type === 'error' ? 'var(--red)' : 'var(--green)',
+              border: `1px solid ${message.type === 'error' ? 'rgba(208, 107, 107, 0.25)' : 'rgba(95, 169, 113, 0.25)'}`,
             }}
           >
-            {message.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            {message.type === 'error' ? <AlertCircle size={15} /> : <CheckCircle2 size={15} />}
             <span>{message.text}</span>
           </div>
         )}
 
-        {/* 부서 목록 */}
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>
-            <RefreshCw size={32} style={{ margin: '0 auto 12px' }} />
-            <div>네이버웍스 캘린더 정보를 불러오는 중입니다...</div>
-          </div>
-        ) : filteredDepts.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>
-            검색 조건에 맞는 부서가 없습니다.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {filteredDepts.map((d) => {
-              const isExpanded = expandedDept === d.dept;
-              const excludedSet = excludedMap[d.dept] || new Set();
-              const includedCount = d.employees.filter(
-                (e) => e.isActive && !excludedSet.has(e.empNo)
-              ).length;
-              const isSaving = savingDept === d.dept;
+        {/* 부서 목록 테이블 */}
+        <div className="table-wrapper" style={{ margin: '14px 18px 18px' }}>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-2)' }}>
+              네이버웍스 캘린더 정보를 불러오는 중입니다...
+            </div>
+          ) : filteredDepts.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-2)' }}>
+              검색 조건에 맞는 부서가 없습니다.
+            </div>
+          ) : (
+            <table className="table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}></th>
+                  <th>부서명</th>
+                  <th>캘린더 상태</th>
+                  <th>구성원 현황</th>
+                  <th>캘린더 ID</th>
+                  <th style={{ textAlign: 'right' }}>관리</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDepts.map((d) => {
+                  const isExpanded = expandedDept === d.dept;
+                  const excludedSet = excludedMap[d.dept] || new Set();
+                  const includedCount = d.employees.filter(
+                    (e) => e.isActive && !excludedSet.has(e.empNo)
+                  ).length;
+                  const isSaving = savingDept === d.dept;
 
-              return (
-                <div
-                  key={d.dept}
-                  style={{
-                    background: 'var(--card-bg, #1e293b)',
-                    border: '1px solid var(--border-color, #334155)',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {/* 부서 카드 헤더 */}
-                  <div
-                    style={{
-                      padding: '16px 20px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '12px',
-                      cursor: 'pointer',
-                      background: isExpanded ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
-                    }}
-                    onClick={() => setExpandedDept(isExpanded ? null : d.dept)}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      {isExpanded ? <ChevronDown size={20} color="#94a3b8" /> : <ChevronRight size={20} color="#94a3b8" />}
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '17px', fontWeight: '600', color: '#f8fafc' }}>
-                            {d.dept}
-                          </span>
-                          {d.isCreated ? (
-                            <span
-                              style={{
-                                fontSize: '12px',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                background: 'rgba(16, 185, 129, 0.2)',
-                                color: '#10b981',
-                                fontWeight: '500',
-                              }}
-                            >
-                              캘린더 생성완료
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                fontSize: '12px',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                background: 'rgba(148, 163, 184, 0.2)',
-                                color: '#94a3b8',
-                                fontWeight: '500',
-                              }}
-                            >
-                              미생성
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '4px' }}>
-                          정직원 {d.activeEmployees}명 중 {includedCount}명 캘린더 멤버 포함 (제외 {excludedSet.size}명)
-                          {d.calendarId && (
-                            <span style={{ marginLeft: '10px', color: '#64748b' }}>
-                              ID: {d.calendarId.slice(0, 8)}...
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 액션 버튼 */}
-                    <div
-                      style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSaveCalendar(d.dept, 'save')}
-                        disabled={isSaving}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 14px',
-                          background: '#2563eb',
-                          border: 'none',
-                          borderRadius: '6px',
-                          color: '#ffffff',
-                          fontSize: '13px',
-                          fontWeight: '500',
-                          cursor: isSaving ? 'not-allowed' : 'pointer',
-                          opacity: isSaving ? 0.7 : 1,
-                        }}
-                      >
-                        <Check size={15} />
-                        {d.isCreated ? '멤버 설정 저장' : '캘린더 생성'}
-                      </button>
-
-                      {d.isCreated && (
-                        <button
-                          type="button"
-                          onClick={() => handleSaveCalendar(d.dept, 'sync-events')}
-                          disabled={isSaving}
-                          title="부서원들의 최근 승인 휴가를 네이버웍스 캘린더에 즉시 동기화합니다"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '8px 12px',
-                            background: '#059669',
-                            border: 'none',
-                            borderRadius: '6px',
-                            color: '#ffffff',
-                            fontSize: '13px',
-                            fontWeight: '500',
-                            cursor: isSaving ? 'not-allowed' : 'pointer',
-                            opacity: isSaving ? 0.7 : 1,
-                          }}
-                        >
-                          <RefreshCw size={14} />
-                          일정 동기화
-                        </button>
-                      )}
-
-                      {d.isCreated && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteCalendar(d.dept)}
-                          disabled={isSaving}
-                          title="캘린더 삭제"
-                          style={{
-                            padding: '8px',
-                            background: 'rgba(239, 68, 68, 0.15)',
-                            border: '1px solid rgba(239, 68, 68, 0.3)',
-                            borderRadius: '6px',
-                            color: '#ef4444',
-                            cursor: isSaving ? 'not-allowed' : 'pointer',
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 펼침 영역: 구성원 제외 설정 체크박스 테이블 */}
-                  {isExpanded && (
-                    <div
+                  return (
+                    <tr
+                      key={d.dept}
+                      onClick={() => setExpandedDept(isExpanded ? null : d.dept)}
                       style={{
-                        borderTop: '1px solid var(--border-color, #334155)',
-                        padding: '16px 20px',
-                        background: 'rgba(15, 23, 42, 0.5)',
+                        cursor: 'pointer',
+                        background: isExpanded ? 'var(--row-hover)' : 'transparent',
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: '13px',
-                          color: '#94a3b8',
-                          marginBottom: '12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                      >
-                        <AlertCircle size={15} color="#f59e0b" />
-                        <span>
-                          체크박스를 선택하면 해당 직원은 네이버웍스 캘린더 멤버 및 일정 동기화에서 제외됩니다 (예: 대표이사, 겸직 임원).
+                      <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
+                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </td>
+                      <td style={{ fontWeight: 800, color: 'var(--text-1)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <CalendarDays size={15} color={d.isCreated ? 'var(--green)' : 'var(--text-3)'} />
+                          <span>{d.dept}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge ${d.isCreated ? 'green' : 'gray'}`}>
+                          {d.isCreated ? '생성완료' : '미생성'}
                         </span>
-                      </div>
+                      </td>
+                      <td style={{ color: 'var(--text-2)', fontSize: 13 }}>
+                        <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{includedCount}명</span> 포함
+                        {excludedSet.size > 0 && (
+                          <span style={{ color: 'var(--amber)', marginLeft: 6 }}>({excludedSet.size}명 제외)</span>
+                        )}
+                        <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>/ 총 {d.activeEmployees}명</span>
+                      </td>
+                      <td className="time-display" style={{ color: 'var(--text-3)', fontSize: 12 }}>
+                        {d.calendarId ? `${d.calendarId.slice(0, 8)}...` : '-'}
+                      </td>
+                      <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveCalendar(d.dept, 'save')}
+                            disabled={isSaving}
+                            style={{
+                              padding: '5px 11px',
+                              borderRadius: 'var(--r-sm)',
+                              background: d.isCreated ? 'var(--bg-card-2)' : 'var(--blue)',
+                              color: d.isCreated ? 'var(--text-1)' : '#fff',
+                              border: d.isCreated ? '1px solid var(--border)' : 'none',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: isSaving ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <Check size={13} />
+                            {d.isCreated ? '멤버 저장' : '캘린더 생성'}
+                          </button>
 
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                          <thead>
-                            <tr style={{ borderBottom: '1px solid #334155', color: '#94a3b8', textAlign: 'left' }}>
-                              <th style={{ padding: '8px 12px', width: '120px' }}>권한 제외</th>
-                              <th style={{ padding: '8px 12px' }}>사번</th>
-                              <th style={{ padding: '8px 12px' }}>이름</th>
-                              <th style={{ padding: '8px 12px' }}>네이버웍스 이메일</th>
-                              <th style={{ padding: '8px 12px' }}>상태</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {d.employees.map((emp) => {
-                              const isExcluded = excludedSet.has(emp.empNo);
-                              return (
-                                <tr
-                                  key={emp.empNo}
-                                  style={{
-                                    borderBottom: '1px solid rgba(51, 65, 85, 0.5)',
-                                    background: isExcluded ? 'rgba(239, 68, 68, 0.05)' : 'transparent',
-                                  }}
-                                >
-                                  <td style={{ padding: '10px 12px' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={isExcluded}
-                                        onChange={() => toggleExclude(d.dept, emp.empNo)}
-                                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                                      />
-                                      <span style={{ fontSize: '12px', color: isExcluded ? '#f87171' : '#94a3b8' }}>
-                                        {isExcluded ? '제외됨' : '포함'}
-                                      </span>
-                                    </label>
-                                  </td>
-                                  <td style={{ padding: '10px 12px', color: '#cbd5e1' }}>{emp.empNo}</td>
-                                  <td style={{ padding: '10px 12px', fontWeight: '500', color: '#f8fafc' }}>
-                                    {emp.name}
-                                  </td>
-                                  <td style={{ padding: '10px 12px', color: '#94a3b8' }}>
-                                    {emp.email || '-'}
-                                  </td>
-                                  <td style={{ padding: '10px 12px' }}>
-                                    {emp.isActive ? (
-                                      <span style={{ color: '#10b981', fontSize: '12px' }}>정상 (재직)</span>
-                                    ) : (
-                                      <span style={{ color: '#ef4444', fontSize: '12px' }}>퇴사/비활성</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+                          {d.isCreated && (
+                            <button
+                              type="button"
+                              onClick={() => handleSaveCalendar(d.dept, 'sync-events')}
+                              disabled={isSaving}
+                              title="최근 승인 연차 일정을 네이버웍스 캘린더에 즉시 동기화합니다"
+                              style={{
+                                padding: '5px 10px',
+                                borderRadius: 'var(--r-sm)',
+                                background: 'var(--bg-card-2)',
+                                color: 'var(--green)',
+                                border: '1px solid var(--border)',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: isSaving ? 'not-allowed' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                              }}
+                            >
+                              <RefreshCw size={12} className={isSaving ? 'animate-spin' : ''} />
+                              일정 동기화
+                            </button>
+                          )}
+
+                          {d.isCreated && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCalendar(d.dept)}
+                              disabled={isSaving}
+                              title="캘린더 삭제"
+                              style={{
+                                padding: '5px 8px',
+                                borderRadius: 'var(--r-sm)',
+                                background: 'rgba(208, 107, 107, 0.12)',
+                                color: 'var(--red)',
+                                border: '1px solid rgba(208, 107, 107, 0.25)',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: isSaving ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* 펼쳐진 부서의 구성원 제외 설정 패널 */}
+        {expandedDept && (() => {
+          const d = departments.find((dept) => dept.dept === expandedDept);
+          if (!d) return null;
+          const excludedSet = excludedMap[d.dept] || new Set();
+
+          return (
+            <div
+              style={{
+                margin: '0 18px 18px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--r-md)',
+                background: 'var(--bg-card-2)',
+                padding: '14px 18px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 10,
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                  <span>[{d.dept}] 구성원 상세 설정</span>
+                  <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)' }}>
+                    (체크 시 캘린더 멤버 및 일정 동기화에서 제외)
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  ※ 프리랜서는 MySQL 정직원 명단에 없으므로 자동 제외됩니다.
+                </div>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', textAlign: 'left' }}>
+                      <th style={{ padding: '6px 10px', width: 90 }}>권한 제외</th>
+                      <th style={{ padding: '6px 10px' }}>이름</th>
+                      <th style={{ padding: '6px 10px' }}>사번</th>
+                      <th style={{ padding: '6px 10px' }}>네이버웍스 이메일</th>
+                      <th style={{ padding: '6px 10px' }}>재직상태</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.employees.map((emp) => {
+                      const isExcluded = excludedSet.has(emp.empNo);
+                      return (
+                        <tr
+                          key={emp.empNo}
+                          style={{
+                            borderBottom: '1px solid var(--border-row)',
+                            background: isExcluded ? 'rgba(208, 107, 107, 0.05)' : 'transparent',
+                          }}
+                        >
+                          <td style={{ padding: '8px 10px' }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={isExcluded}
+                                onChange={() => toggleExclude(d.dept, emp.empNo)}
+                                style={{ cursor: 'pointer' }}
+                              />
+                              <span style={{ color: isExcluded ? 'var(--red)' : 'var(--text-3)', fontWeight: isExcluded ? 700 : 400 }}>
+                                {isExcluded ? '제외됨' : '포함'}
+                              </span>
+                            </label>
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--text-1)' }}>{emp.name}</td>
+                          <td className="time-display" style={{ padding: '8px 10px', color: 'var(--text-2)' }}>{emp.empNo}</td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-2)' }}>{emp.email || '-'}</td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span className={`badge ${emp.isActive ? 'green' : 'resigned'}`}>
+                              {emp.isActive ? '재직' : '퇴사/비활성'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </EmployeeAdminShell>
   );
