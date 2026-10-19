@@ -35,3 +35,16 @@ Hobby 플랜에서는 프로젝트 팀 소유자의 Git 계정으로 커밋해�
 운영 도메인은 `https://atdc.hectoqnm.co.kr`이며 운영 Supabase는 회사 서울 프로젝트
 `qcpqcuzvirmbjzqjzapt`입니다. 배포 전 환경을 확인하고, 새 배포가 READY인 것을
 확인한 뒤 운영 도메인을 전환합니다.
+
+## 자동배포 환경 구성 (2026-10-19)
+
+`agitated-raman`이 이 저장소의 운영·Preview 자동배포 프로젝트입니다.
+기존 환경변수 19개는 동일한 변수 ID와 값을 유지하고 Production 및 Preview에 적용합니다.
+Preview도 운영과 같은 DB·외부 연동 설정을 사용하므로 실제 데이터에 접근하는 환경입니다.
+변수 값은 이 문서나 Git에 저장하지 않습니다.
+
+같은 저장소가 연결되어 있던 별도 Vercel `hecto-attendance` 프로젝트
+(`prj_cFI0XtUYY2kvI9K4AVIogzKUzOjo`)는 Git 연결을 해제했습니다.
+이 프로젝트는 환경변수가 없어 모든 자동 빌드가 실패하던 중복 배포 경로였으며,
+회사 운영 도메인 `atdc.hectoqnm.co.kr`은 `agitated-raman`에 연결되어 있습니다.
+중복 프로젝트와 기존 배포 기록·도메인은 삭제하지 않았습니다.
