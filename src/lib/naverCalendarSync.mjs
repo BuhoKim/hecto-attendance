@@ -1,4 +1,4 @@
-import { buildLeaveEventPayload, filterCalendarMembers, getManagedEventKey, normalizeCalendarSourceDepts } from './naverCalendarRules.mjs';
+import { buildLeaveEventPayload, filterCalendarMembers, formatCalendarDate, getManagedEventKey, normalizeCalendarSourceDepts } from './naverCalendarRules.mjs';
 
 // Shared by the admin API and the CommonJS worker, so both honor saved sources.
 export async function syncCalendarLeaveSources({ calendarId, dept, sourceDepts, additionalEmpNos = [], excludedEmpNos = [], supabase, token, serviceAccount, labels = {}, fetchImpl = fetch, now = new Date() }) {
@@ -8,25 +8,28 @@ export async function syncCalendarLeaveSources({ calendarId, dept, sourceDepts, 
   const sources = new Set(normalizeCalendarSourceDepts(dept, sourceDepts));
   const members = filterCalendarMembers((employees || []).filter((emp) => sources.has(emp.dept) || additionalEmpNos.includes(String(emp.emp_no))), excludedEmpNos);
   const empMap = new Map(members.map((emp) => [emp.empNo, emp]));
-  const past = new Date(now.getTime() - 60 * 86400000);
   const future = new Date(now.getTime() + 180 * 86400000);
-  // Align to complete Seoul calendar days, including today's all-day events.
-  const fromDay = new Date(past.getTime() + 9 * 3600000).toISOString().slice(0, 10);
   const untilDay = new Date(future.getTime() + 9 * 3600000).toISOString().slice(0, 10);
-  const from = new Date(`${fromDay}T00:00:00+09:00`);
-  const until = new Date(`${untilDay}T23:59:59+09:00`);
+  // Every past approved leave is included; only future leave is bounded.
   const leaves = [];
   if (members.length) {
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await supabase.from('sa_leaves').select('*')
         .in('emp_no', members.map((emp) => emp.empNo)).eq('status', '40')
-        .gte('end_date', fromDay.replaceAll('-', '')).lte('start_date', untilDay.replaceAll('-', ''))
+        .gte('end_date', '19000101').lte('start_date', untilDay.replaceAll('-', ''))
         .order('id', { ascending: true }).range(offset, offset + 499);
       if (error) throw new Error(`휴가 목록 조회 실패: ${error.message}`);
       leaves.push(...(data || []));
       if ((data || []).length < 500) break;
     }
   }
+  // Read existing events from the earliest leave (at least the last 60 days).
+  const earliest = leaves.reduce((min, leave) => {
+    const day = formatCalendarDate(leave.start_date || leave.startDate);
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) && day < min ? day : min;
+  }, new Date(now.getTime() - 60 * 86400000 + 9 * 3600000).toISOString().slice(0, 10));
+  const from = new Date(`${earliest}T00:00:00+09:00`);
+  const until = new Date(`${untilDay}T23:59:59+09:00`);
   const desired = new Map();
   for (const leave of leaves) {
     const emp = empMap.get(String(leave.emp_no).trim());
