@@ -3,6 +3,13 @@
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+const SSO_ERRORS = {
+  state: '네이버웍스 로그인이 만료되었습니다. 다시 시도해 주세요.',
+  not_employee: '근태 시스템 사용 대상 직원이 아닙니다. 관리자에게 문의해 주세요.',
+  no_account: '근태 시스템 계정이 없습니다. 관리자에게 문의해 주세요.',
+  server: '네이버웍스 로그인 중 오류가 발생했습니다.',
+};
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -10,7 +17,7 @@ function LoginForm() {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword]     = useState('');
-  const [error, setError]           = useState('');
+  const [error, setError]           = useState(SSO_ERRORS[searchParams.get('sso_error')] || '');
   const [loading, setLoading]       = useState(false);
 
   async function handleSubmit(e) {
@@ -105,6 +112,15 @@ function LoginForm() {
           </span>
         ) : '로그인'}
       </button>
+
+      <div className="login-divider"><span>또는</span></div>
+
+      <a
+        href={`/api/auth/naverworks?next=${encodeURIComponent(redirect)}`}
+        className="login-sso-btn"
+      >
+        네이버웍스로 로그인
+      </a>
     </form>
   );
 }
@@ -296,6 +312,42 @@ export default function LoginPage() {
         .login-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+
+        .login-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-size: 0.75rem;
+          color: #94a3b8;
+          font-weight: 600;
+        }
+
+        .login-divider::before,
+        .login-divider::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: #e2e8f0;
+        }
+
+        .login-sso-btn {
+          display: block;
+          text-align: center;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          padding: 13px;
+          font-size: 0.9375rem;
+          font-weight: 700;
+          color: #1e293b;
+          text-decoration: none;
+          transition: all 0.2s;
+        }
+
+        .login-sso-btn:hover {
+          border-color: #00c73c;
+          background: #f0fdf4;
         }
 
         .login-btn-loading {
