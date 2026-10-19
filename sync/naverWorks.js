@@ -422,6 +422,7 @@ async function syncDepartmentCalendars(supabase) {
     }
   }
   result.success = result.failed === 0;
+  console.log(`[NaverWorks Calendar Sync] 캘린더 ${result.processed}개 처리 · 신규 일정 ${result.created}건 · 실패 ${result.failed}건`);
   return result;
 }
 
