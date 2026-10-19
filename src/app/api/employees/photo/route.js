@@ -9,14 +9,16 @@ export async function GET(request) {
   if (!session) return new NextResponse(null, { status: 401 });
 
   const empNo = new URL(request.url).searchParams.get('empNo');
-  if (!empNo || !isNaverWorksConfigured()) return new NextResponse(null, { status: 404 });
+  const notFound = (reason) => new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'no-store', 'X-Photo-Reason': reason } });
+  if (!empNo) return notFound('emp_no');
+  if (!isNaverWorksConfigured()) return notFound('config');
 
   const { data: employee } = await getAdminClient()
     .from('sa_employees')
     .select('email')
     .eq('emp_no', empNo)
     .maybeSingle();
-  if (!employee?.email) return new NextResponse(null, { status: 404 });
+  if (!employee?.email) return notFound('email');
 
   try {
     const token = await getAccessToken();
@@ -30,7 +32,8 @@ export async function GET(request) {
     const location = redirect.headers.get('location');
     const res = location ? await fetch(location, { headers }) : redirect;
     if (!res.ok || !res.headers.get('content-type')?.startsWith('image/')) {
-      return new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'private, max-age=3600' } });
+      console.warn('[Employee photo] upstream', redirect.status, res.status);
+      return notFound(`upstream_${redirect.status}_${res.status}`);
     }
     return new NextResponse(await res.arrayBuffer(), {
       headers: {
