@@ -20,9 +20,15 @@ export async function GET(request) {
 
   try {
     const token = await getAccessToken();
-    const res = await fetch(`https://www.worksapis.com/v1.0/users/${encodeURIComponent(employee.email)}/photo`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const headers = { Authorization: `Bearer ${token}` };
+    // The API redirects to a different host; fetch drops Authorization on
+    // cross-origin redirects, so follow it manually with the token.
+    const redirect = await fetch(`https://www.worksapis.com/v1.0/users/${encodeURIComponent(employee.email)}/photo`, {
+      headers,
+      redirect: 'manual',
     });
+    const location = redirect.headers.get('location');
+    const res = location ? await fetch(location, { headers }) : redirect;
     if (!res.ok || !res.headers.get('content-type')?.startsWith('image/')) {
       return new NextResponse(null, { status: 404, headers: { 'Cache-Control': 'private, max-age=3600' } });
     }
