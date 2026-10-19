@@ -53,11 +53,13 @@ test('validateCalendarConfigPayload는 부서명 누락 시 에러를 던지고 
   const validated = validateCalendarConfigPayload({
     dept: ' 경영지원팀 ',
     excludedEmpNos: [' 20200002 ', '20200002', ''],
+    extraLeaveEmpNos: [' 20210003', '20210003'],
   });
 
   assert.deepEqual(validated, {
     dept: '경영지원팀',
     excludedEmpNos: ['20200002'],
+    extraLeaveEmpNos: ['20210003'],
     sourceDepts: ['경영지원팀'],
     isActive: true,
   });

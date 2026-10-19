@@ -21,7 +21,8 @@ export default function AdminNaverCalendarsPage() {
   const [search, setSearch] = useState('');
   const [expandedDept, setExpandedDept] = useState(null);
   const [excludedMap, setExcludedMap] = useState({});
-  const [sourceDeptMap, setSourceDeptMap] = useState({});
+  const [extraMap, setExtraMap] = useState({});
+  const [personSearch, setPersonSearch] = useState('');
   const [savingDept, setSavingDept] = useState(null);
   const [message, setMessage] = useState(null);
 
@@ -45,7 +46,7 @@ export default function AdminNaverCalendarsPage() {
         map[d.dept] = new Set((d.excludedEmpNos || []).map(String));
       }
       setExcludedMap(map);
-      setSourceDeptMap(Object.fromEntries((data.departments || []).map((d) => [d.dept, new Set(d.sourceDepts || [d.dept])])));
+      setExtraMap(Object.fromEntries((data.departments || []).map((d) => [d.dept, (d.extraLeaveEmpNos || []).map(String)])));
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
     } finally {
@@ -67,6 +68,25 @@ export default function AdminNaverCalendarsPage() {
         d.employees.some((e) => e.name.toLowerCase().includes(q) || String(e.empNo).includes(q))
     );
   }, [departments, search]);
+
+  // 주 소속 기준 직원 목록 (개별 추가 검색용)
+  const allEmployees = useMemo(() => {
+    const map = new Map();
+    for (const d of departments) {
+      for (const e of d.employees) {
+        if (!e.isConcurrent && e.isActive && !map.has(e.empNo)) map.set(e.empNo, { ...e, dept: d.dept });
+      }
+    }
+    return Array.from(map.values());
+  }, [departments]);
+  const employeeByNo = useMemo(() => new Map(allEmployees.map((e) => [e.empNo, e])), [allEmployees]);
+
+  const toggleExtra = (dept, empNo) => {
+    setExtraMap((prev) => {
+      const cur = prev[dept] || [];
+      return { ...prev, [dept]: cur.includes(empNo) ? cur.filter((no) => no !== empNo) : [...cur, empNo] };
+    });
+  };
 
   const toggleExclude = (dept, empNo) => {
     const curSet = new Set(excludedMap[dept] || []);
@@ -90,7 +110,8 @@ export default function AdminNaverCalendarsPage() {
         body: JSON.stringify({
           dept,
           excludedEmpNos: excludedList,
-          sourceDepts: Array.from(sourceDeptMap[dept] || [dept]),
+          sourceDepts: [dept],
+          extraLeaveEmpNos: extraMap[dept] || [],
           action,
         }),
       });
@@ -261,7 +282,12 @@ export default function AdminNaverCalendarsPage() {
                     (e) => e.isActive && !excludedSet.has(String(e.empNo))
                   ).length;
                   const isSaving = savingDept === d.dept;
-                  const selectedSources = sourceDeptMap[d.dept] || new Set([d.dept]);
+                  const extraEmpNos = extraMap[d.dept] || [];
+                  const query = personSearch.trim().toLowerCase();
+                  const searchResults = query
+                    ? allEmployees.filter((e) => e.dept !== d.dept
+                      && (e.name.toLowerCase().includes(query) || e.empNo.includes(query) || e.dept.toLowerCase().includes(query))).slice(0, 8)
+                    : [];
 
                   return (
                     <Fragment key={d.dept}>
@@ -302,7 +328,7 @@ export default function AdminNaverCalendarsPage() {
                             <span>{d.dept}</span>
                           </div>
                           <div style={{ color: 'var(--text-3)', fontSize: 11, fontWeight: 400, marginTop: 4 }}>
-                            휴가 표시: {Array.from(selectedSources).join(', ')}
+                            {extraEmpNos.length > 0 ? `추가 인원 ${extraEmpNos.length}명` : '추가 인원 없음'}
                           </div>
                         </td>
                         <td>
@@ -399,26 +425,74 @@ export default function AdminNaverCalendarsPage() {
                         <td colSpan={6} style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <fieldset disabled={isSaving} style={{ margin: 0, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', background: 'var(--bg-card)' }}>
-                              <legend style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', padding: '0 4px' }}>휴가를 함께 표시할 조직</legend>
+                              <legend style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', padding: '0 4px' }}>휴가를 함께 표시할 직원</legend>
                               <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-3)' }}>
-                                본인 조직은 기본 포함됩니다. 하위조직·상위조직도 필요한 곳만 선택한 뒤 설정을 저장하세요.
-                                선택한 조직의 휴가가 이 캘린더에 표시되며, 열람 권한은 아래 팀원 설정을 따릅니다.
+                                다른 부서 직원을 검색해 추가하면 그 직원의 휴가가 이 캘린더에 표시됩니다. 추가한 직원에게 캘린더 열람 권한은 주어지지 않습니다.
                               </p>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 18px' }}>
-                                {departments.map((source) => (
-                                  <label key={source.dept} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', cursor: 'pointer' }}>
-                                    <input type="checkbox" aria-label={`${d.dept}에 ${source.dept} 휴가 표시`}
-                                      checked={selectedSources.has(source.dept)} disabled={source.dept === d.dept}
-                                      onChange={() => setSourceDeptMap((prev) => {
-                                        const next = new Set(prev[d.dept] || [d.dept]);
-                                        if (next.has(source.dept)) next.delete(source.dept); else next.add(source.dept);
-                                        return { ...prev, [d.dept]: next };
-                                      })}
-                                      style={{ accentColor: 'var(--blue)' }} />
-                                    {source.dept}{source.dept === d.dept ? ' (기본)' : ''}
-                                  </label>
-                                ))}
+                              <div style={{ position: 'relative', maxWidth: 360 }}>
+                                <input
+                                  value={personSearch}
+                                  onChange={(e) => setPersonSearch(e.target.value)}
+                                  placeholder="이름, 사번 또는 부서 검색..."
+                                  className="search-input"
+                                  style={{ width: '100%', paddingLeft: 34 }}
+                                />
+                                <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)' }} />
                               </div>
+                              {query && (
+                                <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', maxWidth: 520 }}>
+                                  {searchResults.length === 0 ? (
+                                    <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-3)' }}>검색 결과가 없습니다.</div>
+                                  ) : searchResults.map((e) => {
+                                    const added = extraEmpNos.includes(e.empNo);
+                                    return (
+                                      <div key={e.empNo} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '7px 12px', borderBottom: '1px solid var(--border-row)', fontSize: 12 }}>
+                                        <span>
+                                          <strong style={{ color: 'var(--text-1)' }}>{e.name}</strong>
+                                          <span style={{ color: 'var(--text-3)', marginLeft: 8 }}>{e.dept} · {e.empNo}</span>
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleExtra(d.dept, e.empNo)}
+                                          style={{
+                                            padding: '3px 10px',
+                                            borderRadius: 'var(--r-sm)',
+                                            background: added ? 'var(--bg-card-2)' : 'var(--blue)',
+                                            color: added ? 'var(--text-2)' : '#fff',
+                                            border: added ? '1px solid var(--border)' : 'none',
+                                            fontSize: 12,
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                          }}
+                                        >
+                                          {added ? '추가됨' : '추가'}
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {extraEmpNos.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                                  {extraEmpNos.map((no) => {
+                                    const e = employeeByNo.get(no);
+                                    return (
+                                      <span key={no} className="badge blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                        {e ? `${e.name} (${e.dept})` : no}
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleExtra(d.dept, no)}
+                                          aria-label={`${e?.name || no} 제거`}
+                                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', fontWeight: 700 }}
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-3)' }}>추가·제거 후 [설정 저장]을 눌러야 반영됩니다.</p>
                             </fieldset>
                             <div
                               style={{

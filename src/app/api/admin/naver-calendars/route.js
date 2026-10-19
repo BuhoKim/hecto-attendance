@@ -85,11 +85,14 @@ export async function GET(request) {
       const calRecord = calMap.get(dept) || null;
 
       let excludedEmpNos = [];
+      let extraLeaveEmpNos = [];
       let calendarId = null;
       if (calRecord) {
         calendarId = calRecord.token; // 네이버웍스 calendarId
         try {
-          excludedEmpNos = calendarRosterExclusions(allEmps, parseCalendarMemberConfig(calRecord.calendar_config || calRecord.owner_emp_no));
+          const config = parseCalendarMemberConfig(calRecord.calendar_config || calRecord.owner_emp_no);
+          excludedEmpNos = calendarRosterExclusions(allEmps, config);
+          extraLeaveEmpNos = config.extraLeaveEmpNos;
         } catch {
           excludedEmpNos = [];
         }
@@ -104,6 +107,7 @@ export async function GET(request) {
         totalEmployees: allEmps.length,
         activeEmployees: activeEmps.length,
         excludedEmpNos,
+        extraLeaveEmpNos,
         sourceDepts: normalizeCalendarSourceDepts(dept, calRecord?.depts),
         employees: allEmps.map((e) => ({
           empNo: String(e.emp_no),
@@ -143,7 +147,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { dept, excludedEmpNos, sourceDepts } = validateCalendarConfigPayload(body);
+    const { dept, excludedEmpNos, extraLeaveEmpNos, sourceDepts } = validateCalendarConfigPayload(body);
 
     const supabase = getAdminClient();
 
@@ -162,6 +166,10 @@ export async function POST(request) {
     const knownDepts = new Set(roster.map((emp) => emp.dept));
     if (sourceDepts.some((name) => !knownDepts.has(name))) {
       return NextResponse.json({ error: '직원 명단에 없는 조직은 선택할 수 없습니다.' }, { status: 400 });
+    }
+    const knownEmpNos = new Set((emps || []).map((emp) => String(emp.emp_no)));
+    if (extraLeaveEmpNos.some((no) => !knownEmpNos.has(no))) {
+      return NextResponse.json({ error: '직원 명단에 없는 사번은 추가할 수 없습니다.' }, { status: 400 });
     }
 
     // 2. 제외 사번을 반영한 실제 네이버웍스 등록 대상 필터링
@@ -194,7 +202,7 @@ export async function POST(request) {
           .update({
             label: calendarName,
             depts: sourceDepts,
-            calendar_config: { excludedEmpNos, includedConcurrentEmpNos },
+            calendar_config: { excludedEmpNos, includedConcurrentEmpNos, extraLeaveEmpNos },
             updated_at: new Date().toISOString(),
           })
           .eq('id', existing.id);
@@ -217,7 +225,7 @@ export async function POST(request) {
           label: calendarName,
           depts: sourceDepts,
           scope: CALENDAR_SCOPE,
-          calendar_config: { excludedEmpNos, includedConcurrentEmpNos },
+          calendar_config: { excludedEmpNos, includedConcurrentEmpNos, extraLeaveEmpNos },
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -233,7 +241,7 @@ export async function POST(request) {
         calendarId,
         dept,
         sourceDepts,
-        additionalEmpNos: includedConcurrentEmpNos,
+        additionalEmpNos: [...includedConcurrentEmpNos, ...extraLeaveEmpNos],
         excludedEmpNos,
         supabase,
       });

@@ -92,6 +92,9 @@ export function validateCalendarConfigPayload(payload = {}) {
   return {
     dept,
     excludedEmpNos,
+    extraLeaveEmpNos: Array.isArray(payload.extraLeaveEmpNos)
+      ? [...new Set(payload.extraLeaveEmpNos.map((no) => String(no).trim()).filter(Boolean))]
+      : [],
     sourceDepts: normalizeCalendarSourceDepts(dept, payload.sourceDepts),
     isActive: payload.isActive !== false,
   };
@@ -108,8 +111,13 @@ export function normalizeCalendarSourceDepts(dept, sourceDepts = []) {
 export function parseCalendarMemberConfig(value) {
   const config = typeof value === 'string' ? JSON.parse(value) : value || [];
   return Array.isArray(config)
-    ? { excludedEmpNos: config.map(String), includedConcurrentEmpNos: [] }
-    : { excludedEmpNos: (config.excludedEmpNos || []).map(String), includedConcurrentEmpNos: (config.includedConcurrentEmpNos || []).map(String) };
+    ? { excludedEmpNos: config.map(String), includedConcurrentEmpNos: [], extraLeaveEmpNos: [] }
+    : {
+      excludedEmpNos: (config.excludedEmpNos || []).map(String),
+      includedConcurrentEmpNos: (config.includedConcurrentEmpNos || []).map(String),
+      // Individually added staff whose leave is shown; they get no calendar access.
+      extraLeaveEmpNos: (config.extraLeaveEmpNos || []).map(String),
+    };
 }
 
 export function buildCalendarDepartmentRoster(employees = [], users = []) {

@@ -410,7 +410,7 @@ async function syncDepartmentCalendars(supabase) {
       });
       if (!response.ok) throw new Error(`멤버 갱신 실패 (${response.status})`);
       const synced = await syncCalendarLeaveSources({ calendarId: cal.token, dept, sourceDepts: cal.depts,
-        additionalEmpNos: roster.filter((emp) => emp.isConcurrent && !excludedEmpNos.includes(String(emp.emp_no))).map((emp) => String(emp.emp_no)),
+        additionalEmpNos: [...roster.filter((emp) => emp.isConcurrent && !excludedEmpNos.includes(String(emp.emp_no))).map((emp) => String(emp.emp_no)), ...config.extraLeaveEmpNos],
         excludedEmpNos, supabase, token, serviceAccount: getEnvConfig().serviceAccount, labels: LEAVE_CODE_LABELS });
       result.processed++;
       result.created += synced.created;
