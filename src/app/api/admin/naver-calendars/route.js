@@ -8,6 +8,7 @@ import {
   syncDepartmentCalendarEvents,
   isNaverWorksConfigured,
   getAccessToken,
+  listNaverCalendarMonth,
 } from '@/lib/naverWorks';
 import {
   filterCalendarMembers,
@@ -36,6 +37,22 @@ export async function GET(request) {
     }
 
     const supabase = getAdminClient();
+
+    const params = new URL(request.url).searchParams;
+    if (params.get('view') === 'events') {
+      if (!session.isAdmin) return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 403 });
+      const dept = params.get('dept');
+      const month = params.get('month') || '';
+      if (!dept || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || Number(month.slice(0, 4)) < 1900 || Number(month.slice(0, 4)) > 2200) {
+        return NextResponse.json({ error: '부서와 조회 월을 확인해 주세요.' }, { status: 400 });
+      }
+      const { data: records, error } = await supabase.from('sa_ical_subscriptions').select('token, depts').eq('scope', CALENDAR_SCOPE);
+      if (error) throw new Error('캘린더 설정 조회에 실패했습니다.');
+      const record = (records || []).find((r) => r.depts?.[0] === dept);
+      if (!record?.token) return NextResponse.json({ error: '생성된 캘린더가 없습니다.' }, { status: 404 });
+      const events = await listNaverCalendarMonth(record.token, month);
+      return NextResponse.json({ dept, month, events, checkedAt: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } });
+    }
 
     // 1. sa_employees (MySQL hr_employee에서 동기화된 정직원 목록)
     // 2. sa_ical_subscriptions (scope: naver-works-calendar 에 저장된 캘린더 매핑)

@@ -463,6 +463,44 @@ export async function deleteNaverCalendar(calendarId) {
 /**
  * 부서 캘린더 일정 동기화 (기존 등록 일정 중복 방지 및 신규 등록)
  */
+export async function listNaverCalendarMonth(calendarId, month) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || Number(month.slice(0, 4)) < 1900 || Number(month.slice(0, 4)) > 2200) {
+    throw new Error('조회 월이 올바르지 않습니다.');
+  }
+  const token = await getAccessToken();
+  if (!token) throw new Error('네이버웍스 인증이 필요합니다.');
+  const from = new Date(`${month}-01T00:00:00+09:00`);
+  const end = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1) - 9 * 3600000);
+  const events = new Map();
+  const base = `https://www.worksapis.com/v1.0/users/${encodeURIComponent(getEnvConfig().serviceAccount)}/calendars/${encodeURIComponent(calendarId)}/events`;
+  for (let time = +from; time < +end; time += 28 * 86400000) {
+    const params = new URLSearchParams({ fromDateTime: new Date(time).toISOString(), untilDateTime: new Date(Math.min(time + 28 * 86400000, +end)).toISOString() });
+    const res = await fetch(`${base}?${params}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    if (!res.ok) throw new Error(`네이버웍스 일정 조회 실패 (${res.status})`);
+    const data = await res.json();
+    if (!Array.isArray(data.events)) throw new Error('일정 응답이 올바르지 않습니다.');
+    for (const event of data.events) {
+      for (const component of event.eventComponents || []) {
+        const id = component.eventId || event.eventId;
+        if (!id) throw new Error('일정 식별 정보를 확인할 수 없습니다.');
+        const start = component.start?.date || component.start?.dateTime || '';
+        const finish = component.end?.date || component.end?.dateTime || '';
+        const endDate = component.end?.date
+          ? new Date(new Date(`${finish}T00:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10)
+          : finish.slice(0, 10);
+        events.set(`${id}:${start}`, { id, title: component.summary || '(제목 없음)', start, end: endDate, description: component.description || '' });
+      }
+    }
+  }
+  const rows = [...events.values()].sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title, 'ko'));
+  const counts = new Map();
+  for (const row of rows) {
+    const key = `${row.title}:${row.start.slice(0, 10)}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return rows.map((row) => ({ ...row, duplicate: counts.get(`${row.title}:${row.start.slice(0, 10)}`) > 1 }));
+}
+
 export async function syncDepartmentCalendarEvents({ calendarId, dept, sourceDepts, additionalEmpNos, excludedEmpNos = [], supabase }) {
   const token = await getAccessToken();
   if (!token) throw new Error('네이버웍스 인증 토큰이 설정되지 않았습니다.');

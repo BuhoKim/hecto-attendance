@@ -14,6 +14,7 @@ import {
   Users,
 } from 'lucide-react';
 import EmployeeAdminShell from '../employees/EmployeeAdminShell';
+import CalendarEventsModal from './CalendarEventsModal';
 
 export default function AdminNaverCalendarsPage() {
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,7 @@ export default function AdminNaverCalendarsPage() {
   const [personSearch, setPersonSearch] = useState('');
   const [savingDept, setSavingDept] = useState(null);
   const [message, setMessage] = useState(null);
+  const [viewingDept, setViewingDept] = useState(null);
 
   const fetchStatus = async () => {
     setLoading(true);
@@ -348,6 +350,7 @@ export default function AdminNaverCalendarsPage() {
                         </td>
                         <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                            {d.isCreated && <button type="button" onClick={() => setViewingDept(d.dept)} style={{ padding: '5px 10px', borderRadius: 'var(--r-sm)', background: 'var(--bg-card-2)', color: 'var(--blue)', border: '1px solid var(--border)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>등록 내역</button>}
                             <button
                               type="button"
                               onClick={() => handleSaveCalendar(d.dept, 'save')}
@@ -616,6 +619,7 @@ export default function AdminNaverCalendarsPage() {
         )}
       </div>
     </div>
+    {viewingDept && <CalendarEventsModal dept={viewingDept} onClose={() => setViewingDept(null)} />}
   </EmployeeAdminShell>
   );
 }
