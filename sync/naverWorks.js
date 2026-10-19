@@ -477,22 +477,28 @@ async function syncDepartmentCalendars(supabase) {
     if (!leaves || leaves.length === 0) continue;
 
     // 네이버웍스 기존 등록 일정 확인
-    const calFrom = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000).toISOString();
-    const calUntil = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString();
-
     let existingKeys = new Set();
     try {
-      const listRes = await fetch(
-        `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events?fromDateTime=${encodeURIComponent(calFrom)}&untilDateTime=${encodeURIComponent(calUntil)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (listRes.ok) {
-        const listData = await listRes.json();
-        for (const ev of listData.events || []) {
-          for (const comp of ev.eventComponents || []) {
-            const m = comp.description?.match(/\[KEY:\s*([^\]]+)\]/);
-            if (m) existingKeys.add(m[1].trim());
-            else if (comp.summary && comp.start?.date) existingKeys.add(`${comp.summary}_${comp.start.date}`);
+      const chunkMs = 28 * 24 * 60 * 60 * 1000;
+      for (let t = past.getTime(); t < future.getTime(); t += chunkMs) {
+        const chunkFrom = new Date(t).toISOString();
+        const chunkUntil = new Date(Math.min(t + chunkMs, future.getTime())).toISOString();
+        const listRes = await fetch(
+          `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events?fromDateTime=${encodeURIComponent(chunkFrom)}&untilDateTime=${encodeURIComponent(chunkUntil)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          for (const ev of listData.events || []) {
+            for (const comp of ev.eventComponents || []) {
+              const m = comp.description?.match(/\[KEY:\s*([^\]]+)\]/);
+              if (m) existingKeys.add(m[1].trim());
+              if (comp.summary && comp.start?.date) {
+                existingKeys.add(`${comp.summary}_${comp.start.date}`);
+                const namePart = comp.summary.split('·')[0].trim();
+                if (namePart) existingKeys.add(`${namePart}_${comp.start.date}`);
+              }
+            }
           }
         }
       }
@@ -509,12 +515,18 @@ async function syncDepartmentCalendars(supabase) {
         ? `${l.end_date.slice(0, 4)}-${l.end_date.slice(4, 6)}-${l.end_date.slice(6, 8)}`
         : String(l.end_date || l.start_date || '').slice(0, 10);
 
-      const leaveKey = `${l.emp_no}_${startDate}_${l.leave_code}`;
+      const leaveCode = String(l.leave_code || '').trim();
+      const leaveKey = `${l.emp_no}_${startDate}_${leaveCode}`;
       const empName = l.emp_name || emp.name;
-      const leaveLabel = l.leave_name || '연차';
+      const rawName = String(l.leave_name || '').trim();
+      const leaveLabel = LEAVE_CODE_LABELS[leaveCode] || (rawName && !/^\d+$/.test(rawName) ? rawName : '연차');
       const summary = `${empName} · ${leaveLabel}`;
 
-      if (existingKeys.has(leaveKey) || existingKeys.has(`${summary}_${startDate}`)) {
+      if (
+        existingKeys.has(leaveKey) ||
+        existingKeys.has(`${summary}_${startDate}`) ||
+        existingKeys.has(`${empName}_${startDate}`)
+      ) {
         continue;
       }
 

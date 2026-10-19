@@ -514,26 +514,32 @@ export async function syncDepartmentCalendarEvents({
 
   if (leaveErr) throw new Error(`휴가 목록 조회 실패: ${leaveErr.message}`);
 
-  // 3. 네이버웍스 캘린더에서 최근 30일 전부터 향후 30일까지 기존 일정 조회
-  const calFrom = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000).toISOString();
-  const calUntil = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString();
-
+  // 3. 네이버웍스 캘린더 기존 일정 조회 (네이버웍스 31일 범위 제한 대응: 28일 단위 청크 조회)
   let existingEventKeys = new Set();
   try {
-    const listRes = await fetch(
-      `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events?fromDateTime=${encodeURIComponent(calFrom)}&untilDateTime=${encodeURIComponent(calUntil)}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      for (const ev of listData.events || []) {
-        for (const comp of ev.eventComponents || []) {
-          // [KEY: ...] 파싱 또는 summary와 날짜 매칭
-          const match = comp.description?.match(/\[KEY:\s*([^\]]+)\]/);
-          if (match) {
-            existingEventKeys.add(match[1].trim());
-          } else if (comp.summary && comp.start?.date) {
-            existingEventKeys.add(`${comp.summary}_${comp.start.date}`);
+    const chunkMs = 28 * 24 * 60 * 60 * 1000;
+    for (let t = past.getTime(); t < future.getTime(); t += chunkMs) {
+      const chunkFrom = new Date(t).toISOString();
+      const chunkUntil = new Date(Math.min(t + chunkMs, future.getTime())).toISOString();
+      const listRes = await fetch(
+        `https://www.worksapis.com/v1.0/users/${serviceAccount}/calendars/${encodeURIComponent(calendarId)}/events?fromDateTime=${encodeURIComponent(chunkFrom)}&untilDateTime=${encodeURIComponent(chunkUntil)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        for (const ev of listData.events || []) {
+          for (const comp of ev.eventComponents || []) {
+            const match = comp.description?.match(/\[KEY:\s*([^\]]+)\]/);
+            if (match) {
+              existingEventKeys.add(match[1].trim());
+            }
+            if (comp.summary && comp.start?.date) {
+              existingEventKeys.add(`${comp.summary}_${comp.start.date}`);
+              const namePart = comp.summary.split('·')[0].trim();
+              if (namePart) {
+                existingEventKeys.add(`${namePart}_${comp.start.date}`);
+              }
+            }
           }
         }
       }
@@ -565,10 +571,16 @@ export async function syncDepartmentCalendarEvents({
     }
 
     const empName = leave.emp_name || emp.name;
-    const leaveLabel = leave.leave_name || '연차';
+    const leaveCode = String(leave.leave_code || '').trim();
+    const rawName = String(leave.leave_name || '').trim();
+    const leaveLabel = LEAVE_CODE_LABELS[leaveCode] || (rawName && !/^\d+$/.test(rawName) ? rawName : '연차');
     const summary = `${empName} · ${leaveLabel}`;
 
-    if (existingEventKeys.has(`${summary}_${startDate}`)) {
+    if (
+      existingEventKeys.has(leaveKey) ||
+      existingEventKeys.has(`${summary}_${startDate}`) ||
+      existingEventKeys.has(`${empName}_${startDate}`)
+    ) {
       skipped++;
       continue;
     }
