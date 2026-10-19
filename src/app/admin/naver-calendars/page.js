@@ -404,7 +404,7 @@ export default function AdminNaverCalendarsPage() {
                                 <Users size={15} color="var(--blue)" />
                                 <span>[{d.dept}] 팀원 명단 (총 {d.employees.length}명)</span>
                                 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)' }}>
-                                  — 체크 시 캘린더 멤버 및 일정 동기화에서 제외됩니다.
+                                  — 체크 해제 시 캘린더 멤버 및 일정 동기화에서 제외됩니다.
                                 </span>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -444,7 +444,7 @@ export default function AdminNaverCalendarsPage() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                                   <thead>
                                     <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-card-2)', color: 'var(--text-3)', textAlign: 'left' }}>
-                                      <th style={{ padding: '7px 12px', width: 100 }}>동기화 권한</th>
+                                      <th style={{ padding: '7px 12px', width: 110 }}>동기화 대상</th>
                                       <th style={{ padding: '7px 12px', width: 140 }}>이름</th>
                                       <th style={{ padding: '7px 12px', width: 120 }}>사번</th>
                                       <th style={{ padding: '7px 12px' }}>네이버웍스 계정(이메일)</th>
@@ -453,13 +453,13 @@ export default function AdminNaverCalendarsPage() {
                                   </thead>
                                   <tbody>
                                     {d.employees.map((emp) => {
-                                      const isExcluded = excludedSet.has(String(emp.empNo));
+                                      const isIncluded = !excludedSet.has(String(emp.empNo));
                                       return (
                                         <tr
                                           key={emp.empNo}
                                           style={{
                                             borderBottom: '1px solid var(--border-row)',
-                                            background: isExcluded ? 'rgba(208, 107, 107, 0.06)' : 'transparent',
+                                            background: !isIncluded ? 'rgba(208, 107, 107, 0.06)' : 'transparent',
                                           }}
                                         >
                                           <td style={{ padding: '8px 12px' }}>
@@ -469,12 +469,12 @@ export default function AdminNaverCalendarsPage() {
                                             >
                                               <input
                                                 type="checkbox"
-                                                checked={isExcluded}
+                                                checked={isIncluded}
                                                 onChange={() => toggleExclude(d.dept, emp.empNo)}
-                                                style={{ cursor: 'pointer', accentColor: 'var(--red)' }}
+                                                style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
                                               />
-                                              <span style={{ color: isExcluded ? 'var(--red)' : 'var(--text-2)', fontWeight: isExcluded ? 700 : 400 }}>
-                                                {isExcluded ? '제외됨' : '포함'}
+                                              <span style={{ color: isIncluded ? 'var(--blue)' : 'var(--red)', fontWeight: isIncluded ? 600 : 700 }}>
+                                                {isIncluded ? '포함' : '제외됨'}
                                               </span>
                                             </label>
                                           </td>
