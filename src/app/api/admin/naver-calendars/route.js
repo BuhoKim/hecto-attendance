@@ -57,7 +57,9 @@ export async function GET(request) {
 
     const token = isNaverWorksConfigured() ? await getAccessToken() : null;
     const users = token ? await getCalendarDirectoryUsers(token) : [];
-    const employees = buildCalendarDepartmentRoster(empRes.data || [], users);
+    // 퇴사/비활성 직원은 관리 화면에 표시하지 않는다.
+    const employees = buildCalendarDepartmentRoster(empRes.data || [], users)
+      .filter((e) => e.is_active !== false && e.status !== 'resigned');
     const calendarRecords = calRes.data || [];
 
     // 부서별 캘린더 매핑 (depts[0] 기준)
