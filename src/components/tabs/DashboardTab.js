@@ -2,6 +2,7 @@
 
 import React, { memo, useMemo, useState } from 'react';
 import { CircleUserRound, Moon, Search, Sun } from 'lucide-react';
+import EmployeePhoto from '../EmployeePhoto';
 import DashboardCalendarWidget from '../DashboardCalendarWidget';
 import { getStatusBadgeMeta } from '../../lib/leaveRules';
 import { matchesDeptFilter, normalizeDeptName } from '../../lib/dashboardUtils';
@@ -374,8 +375,11 @@ function DashboardTab({
                             <tr key={`${emp.empNo || emp.emp_no || emp.name}-${emp.dept || ''}`}>
                               <td>
                                 <div className="dashboard-emp-cell">
-                                  <div className="dashboard-avatar" style={{ background: avatarTone.bg, color: avatarTone.fg }}>
-                                    <CircleUserRound size={17} strokeWidth={1.8} />
+                                  <div className="dashboard-avatar" style={{ background: avatarTone.bg, color: avatarTone.fg, overflow: 'hidden' }}>
+                                    <EmployeePhoto
+                                      empNo={emp.empNo || emp.emp_no}
+                                      fallback={<CircleUserRound size={17} strokeWidth={1.8} />}
+                                    />
                                   </div>
                                   <div className="dashboard-emp-meta">
                                     <div className="dashboard-emp-name">{emp.name}</div>

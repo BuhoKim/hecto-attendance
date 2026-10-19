@@ -26,7 +26,7 @@ const LEADER_ITEMS = [
   { href: '/team/taxi-audit', label: '팀원 택시 소명 내역', icon: CarTaxiFront, iconStyle: { color: 'var(--cyan)' }, activeHref: '/team/taxi-audit', category: '부서' },
   { href: '/team/taxi-report', label: '카카오T 이용 분석', icon: CarTaxiFront, iconStyle: { color: 'var(--amber)' }, activeHref: '/team/taxi-report', category: '부서' },
   { href: '/attendance-records', label: '출입기록 조회 및 조정', icon: Clock, iconStyle: { color: 'var(--blue)' }, category: '부서' },
-  { href: '/admin/ical-subscriptions', label: '캘린더 링크 생성', icon: CalendarDays, iconStyle: { color: 'var(--purple)' }, activeHref: '/admin/ical-subscriptions', category: '부서' },
+  // { href: '/admin/ical-subscriptions', label: '캘린더 링크 생성', icon: CalendarDays, iconStyle: { color: 'var(--purple)' }, activeHref: '/admin/ical-subscriptions', category: '부서' },
   { href: '/?tab=MANUAL_APPROVAL', label: '수동 요청 내역', icon: CheckCircle, iconStyle: { color: 'var(--red)' }, category: '부서' },
 ];
 

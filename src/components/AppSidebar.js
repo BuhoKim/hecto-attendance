@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { sidebarCategories } from '../lib/sidebarConfig';
+import EmployeePhoto from './EmployeePhoto';
 
 function SidebarAction({ action }) {
   const Icon = action.icon;
@@ -128,8 +129,8 @@ export default function AppSidebar({
 
       <div className="sidebar-footer">
         <div className="user-profile">
-          <div className="user-avatar" style={{ background: 'var(--blue)' }}>
-            {profile.name ? profile.name.slice(0, 1) : '?'}
+          <div className="user-avatar" style={{ background: 'var(--blue)', overflow: 'hidden' }}>
+            <EmployeePhoto empNo={profile.empNo} fallback={profile.name ? profile.name.slice(0, 1) : '?'} />
           </div>
           <div className="user-info">
             <div className="user-name" style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>

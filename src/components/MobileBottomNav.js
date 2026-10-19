@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import EmployeePhoto from './EmployeePhoto';
 import { canViewOvertimeMenu, canViewManualApprovalMenu } from '../lib/overtimeRules';
 import {
   LayoutDashboard,
@@ -108,8 +109,8 @@ export default function MobileBottomNav({
       <div className={`mobile-more-panel ${moreOpen ? 'mobile-more-panel--open' : ''}`}>
         <div className="mobile-more-panel__header">
           <div className="mobile-more-panel__profile">
-            <div className="mobile-more-panel__avatar" style={{ background: 'var(--blue)' }}>
-              {profile.name ? profile.name.slice(0, 1) : '?'}
+            <div className="mobile-more-panel__avatar" style={{ background: 'var(--blue)', overflow: 'hidden' }}>
+              <EmployeePhoto empNo={profile.empNo} fallback={profile.name ? profile.name.slice(0, 1) : '?'} />
             </div>
             <div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-1)' }}>
