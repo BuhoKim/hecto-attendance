@@ -205,7 +205,6 @@ export function buildLeaveEventPayload({ empNo, empName, dept, leave }) {
     `부서: ${dept}`,
     `휴가종류: ${label}`,
     `기간: ${startDate} ~ ${rawEndDate}`,
-    `일수: ${leave.leave_days || 1}일`,
   ].join('\n');
 
   return {
