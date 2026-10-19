@@ -53,7 +53,11 @@ export async function GET(request) {
     const token = await getAccessToken();
     const headers = { Authorization: `Bearer ${token}` };
     const email = employee.email || (await getDirectoryByName(headers)).get(String(employee.name || '').trim());
-    if (!email) return notFound('email');
+    if (!email) {
+      const directory = await getDirectoryByName(headers);
+      console.warn('[Employee photo] no email', { hasName: !!employee.name, nameLength: String(employee.name || '').length, directorySize: directory.size });
+      return notFound('email');
+    }
 
     // The API redirects to a different host; fetch drops Authorization on
     // cross-origin redirects, so follow it manually with the token.
