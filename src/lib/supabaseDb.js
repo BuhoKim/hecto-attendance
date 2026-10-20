@@ -256,7 +256,7 @@ export async function fetchAttendanceLogs(yearMonth, options = {}) {
   try {
     const keys = ['employees', 'employeeNames', 'leaves'];
     
-    let employeesQuery = supabase.from('sa_employees').select('emp_no, name, dept').eq('is_active', true).order('dept').order('name');
+    let employeesQuery = supabase.from('sa_employees').select('emp_no, name, dept, status').eq('is_active', true).order('dept').order('name');
     if (empNoArr) employeesQuery = employeesQuery.in('emp_no', empNoArr);
 
     const compactFirstDay = firstDay.replace(/-/g, '');

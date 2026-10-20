@@ -1040,6 +1040,27 @@ button:not(.icon-btn):not(.tab-btn):not(.sidebar-util-btn):not(.tracker-day-cell
   color: var(--text-1);
 }
 
+.dashboard-emp-hrstate {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  vertical-align: middle;
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--amber, #f59e0b);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.dashboard-emp-hrstate[data-state="resigned"] {
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--text-2, #94a3b8);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
 .dashboard-emp-sub {
   font-size: 11px;
   color: var(--text-2);

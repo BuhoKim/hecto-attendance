@@ -397,11 +397,14 @@ export async function GET(request) {
       employees.forEach((emp) => {
         const empNo = emp.empNo || emp.emp_no;
         if (!empNo) return;
+        // hr_state_code 동기화에서 온 재직상태(active/leave/resigned)를 hrState로 내려준다.
+        const hrState = emp.status && !['active', 'leave', 'resigned'].includes(emp.status) ? '' : emp.status;
         allEmployeesMap.set(empNo, {
           empNo,
           name: emp.name,
           dept: emp.dept,
-          cardNo: emp.cardNo || ''
+          cardNo: emp.cardNo || '',
+          hrState,
         });
       });
     } else {
@@ -412,7 +415,8 @@ export async function GET(request) {
           empNo,
           name: log.name,
           dept: log.dept,
-          cardNo: log.cardNo || ''
+          cardNo: log.cardNo || '',
+          hrState: ''
         });
       });
     }

@@ -382,7 +382,11 @@ function DashboardTab({
                                     />
                                   </div>
                                   <div className="dashboard-emp-meta">
-                                    <div className="dashboard-emp-name">{emp.name}</div>
+                                    <div className="dashboard-emp-name">
+                                      {emp.name}
+                                      {emp.hrState === 'leave' ? <span className="dashboard-emp-hrstate">휴직</span> : null}
+                                      {emp.hrState === 'resigned' ? <span className="dashboard-emp-hrstate" data-state="resigned">퇴직</span> : null}
+                                    </div>
                                   </div>
                                 </div>
                               </td>
