@@ -9,14 +9,16 @@
 
 -- SA_employees: hr_employee 복사본
 CREATE TABLE IF NOT EXISTS SA_employees (
-  emp_no       VARCHAR(20) PRIMARY KEY,
-  name         VARCHAR(100) NOT NULL,
-  dept         VARCHAR(100),
-  email        TEXT,
-  login_id     TEXT,
-  company_code VARCHAR(10) DEFAULT '1600',
-  is_active    BOOLEAN DEFAULT TRUE,
-  synced_at    TIMESTAMPTZ DEFAULT NOW()
+  emp_no        VARCHAR(20) PRIMARY KEY,
+  name          VARCHAR(100) NOT NULL,
+  dept          VARCHAR(100),
+  email         TEXT,
+  login_id      TEXT,
+  company_code  VARCHAR(10) DEFAULT '1600',
+  is_active     BOOLEAN DEFAULT TRUE,
+  hr_state_code VARCHAR(10),
+  hr_state_date DATE,
+  synced_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- SA_attendance: t_secom_alarm 복사본

@@ -8,6 +8,7 @@ const { loadSyncEnv } = require('./loadEnv');
 loadSyncEnv();
 const mysql = require('mysql2/promise');
 const { createSyncSupabaseClient } = require('./supabaseClient');
+const { employeeStateFromMysqlRow } = require('./employeeState');
 
 const SYNC_INTERVAL_MS = parseInt(process.env.LEAVES_SYNC_INTERVAL_MS) || 600_000; // 10분
 const MY_COMPANY_CODE  = process.env.MY_COMPANY_CODE || '1600';
@@ -74,19 +75,36 @@ async function syncEmployees(conn) {
 
   if (rows.length === 0) return 0;
 
+  // 상태코드가 없는 직원은 매 주기 동기화로 관리자가 수정한 상태를 지우지 않도록 기존 상태를 보존한다.
+  const { data: existingEmps, error: fetchErr } = await supabase
+    .from('SA_employees')
+    .select('emp_no, is_active, status');
+  if (fetchErr) throw new Error(`기존 직원 조회 실패: ${fetchErr.message}`);
+  const existingMap = new Map((existingEmps || []).map(e => [e.emp_no, e]));
+
   const { error } = await supabase
     .from('SA_employees')
     .upsert(
-      rows.map(r => ({
-        emp_no:       r.emp_no,
-        name:         r.name,
-        dept:         r.dept,
-        email:        extractEmployeeEmail(r) || null,
-        login_id:     extractEmployeeLoginId(r) || null,
-        company_code: MY_COMPANY_CODE,
-        is_active:    true,
-        synced_at:    new Date().toISOString(),
-      })),
+      rows.map(r => {
+        const { stateCode, stateDate, status: stateStatus } = employeeStateFromMysqlRow(r);
+        const isResigned = stateCode === '999';
+        const existing = existingMap.get(r.emp_no);
+        return {
+          emp_no:         r.emp_no,
+          name:           r.name,
+          dept:           r.dept,
+          email:          extractEmployeeEmail(r) || null,
+          login_id:       extractEmployeeLoginId(r) || null,
+          company_code:   MY_COMPANY_CODE,
+          hr_state_code:  stateCode,
+          hr_state_date:  stateDate,
+          is_active:      stateCode === '999' ? false
+                        : stateCode === '001' ? true
+                        : (existing ? existing.is_active : true),
+          status:         stateStatus || (existing ? (existing.status || 'active') : 'active'),
+          synced_at:      new Date().toISOString(),
+        };
+      }),
       { onConflict: 'emp_no' }
     );
 

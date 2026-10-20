@@ -9,6 +9,7 @@ const { loadSyncEnv } = require('./loadEnv');
 loadSyncEnv();
 const mysql = require('mysql2/promise');
 const { createSyncSupabaseClient } = require('./supabaseClient');
+const { employeeStateFromMysqlRow } = require('./employeeState');
 
 const MY_COMPANY_CODE = process.env.MY_COMPANY_CODE || '1600';
 
@@ -90,16 +91,22 @@ async function runSync() {
 
     const records = rows.map(r => {
       const existing = existingMap.get(r.emp_no);
+      const { stateCode, stateDate, status: stateStatus } = employeeStateFromMysqlRow(r);
+      const isResigned = stateCode === '999';
       return {
-        emp_no:       r.emp_no,
-        name:         r.name,
-        dept:         r.dept,
-        email:        extractEmployeeEmail(r) || null,
-        login_id:     extractEmployeeLoginId(r) || null,
-        company_code: MY_COMPANY_CODE,
-        is_active:    existing ? existing.is_active : true,
-        status:       existing ? (existing.status || 'active') : 'active',
-        synced_at:    new Date().toISOString(),
+        emp_no:         r.emp_no,
+        name:           r.name,
+        dept:           r.dept,
+        email:          extractEmployeeEmail(r) || null,
+        login_id:       extractEmployeeLoginId(r) || null,
+        company_code:   MY_COMPANY_CODE,
+        hr_state_code:  stateCode,
+        hr_state_date:  stateDate,
+        is_active:      stateCode === '001' ? true
+                      : isResigned ? false
+                      : (existing ? existing.is_active : true),
+        status:         stateStatus || (isResigned ? 'resigned' : (existing ? (existing.status || 'active') : 'active')),
+        synced_at:      new Date().toISOString(),
       };
     });
 

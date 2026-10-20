@@ -11,6 +11,7 @@ const mysql = require('mysql2/promise');
 const { createSyncSupabaseClient } = require('./supabaseClient');
 const { syncLeavesToNaverWorks, syncDepartmentCalendars } = require('./naverWorks');
 const { getAttendanceWindow, saveAttendanceCheckpoint, formatAttendanceMetrics } = require('./attendanceIncremental');
+const { employeeStateFromMysqlRow } = require('./employeeState');
 
 loadSyncEnv();
 
@@ -217,18 +218,25 @@ async function syncEmployees(conn) {
   const records = rows.map(r => {
     const existing = existingMap.get(r.emp_no);
     const isRetired = String(r.I_RETIRE_YN ?? '').trim() === '1';
+    const { stateCode, stateDate, status: stateStatus } = employeeStateFromMysqlRow(r);
+    // 재직상태는 MySQL 인사마스터의 I_STATE_CODE(001 재직/002 휴직/999 퇴직)를 기준으로 동기화한다.
+    const isResigned = stateCode === '999' || isRetired;
     return {
-      emp_no:       r.emp_no,
-      name:         r.name,
-      dept:         r.dept,
-      email:        extractEmployeeEmail(r) || null,
-      login_id:     extractEmployeeLoginId(r) || null,
-      company_code: MY_COMPANY_CODE,
-      // 퇴사 여부는 MySQL 인사마스터를 기준으로 동기화한다.
-      // 휴직처럼 I_RETIRE_YN이 비어 있는 직원은 기존 활성 상태를 유지한다.
-      is_active:    isRetired ? false : (existing ? existing.is_active : true),
-      status:       isRetired ? 'resigned' : (existing ? (existing.status || 'active') : 'active'),
-      synced_at:    new Date().toISOString(),
+      emp_no:         r.emp_no,
+      name:           r.name,
+      dept:           r.dept,
+      email:          extractEmployeeEmail(r) || null,
+      login_id:       extractEmployeeLoginId(r) || null,
+      company_code:   MY_COMPANY_CODE,
+      hr_state_code:  stateCode,
+      hr_state_date:  stateDate,
+      // 퇴사(999·I_RETIRE_YN=1)는 무조건 비활성, 재직(001)은 무조건 활성으로 상태코드를 우선한다.
+      // 휴직(002)이나 상태코드가 없는 직원은 기존 활성 상태를 유지한다.
+      is_active:      stateCode === '001' ? true
+                    : isResigned ? false
+                    : (existing ? existing.is_active : true),
+      status:         stateStatus || (isResigned ? 'resigned' : (existing ? (existing.status || 'active') : 'active')),
+      synced_at:      new Date().toISOString(),
     };
   });
 
