@@ -383,6 +383,7 @@ export async function fetchAttendanceLogs(yearMonth, options = {}) {
       empNo: e.emp_no,
       name:  e.name,
       dept:  e.dept,
+      status: e.status || '',
     }));
     const employeeNameMap = new Map((employeeNames || []).map(e => [normalizeEmpNoKey(e.emp_no), e.name || '']));
 
