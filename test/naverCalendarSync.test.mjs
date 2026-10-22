@@ -10,6 +10,7 @@ function fixture() {
   const leaves = employees.map((emp) => ({ emp_no: emp.emp_no, start_date: '20261020', end_date: '20261021', status: '40', leave_code: '12' }));
   const events = new Map([['manual', { eventId: 'manual', summary: '수동 일정', description: '', start: { date: '2026-10-20' } }]]);
   const writes = [];
+  const readFromDates = [];
   let failRead = false;
   let nextId = 0;
   const supabase = { from(table) {
@@ -25,7 +26,10 @@ function fixture() {
     return query;
   } };
   const fetchImpl = async (url, options = {}) => {
-    if (!options.method) return { ok: !failRead, status: failRead ? 503 : 200, json: async () => ({ events: [...events.values()].map((component) => ({ eventComponents: [component] })) }) };
+    if (!options.method) {
+      readFromDates.push(new URL(url).searchParams.get('fromDateTime'));
+      return { ok: !failRead, status: failRead ? 503 : 200, json: async () => ({ events: [...events.values()].map((component) => ({ eventComponents: [component] })) }) };
+    }
     writes.push(options.method);
     const id = decodeURIComponent(new URL(url).pathname.split('/').pop());
     if (options.method === 'DELETE') events.delete(id);
@@ -38,8 +42,23 @@ function fixture() {
   };
   const sync = (sourceDepts, options = {}) => syncCalendarLeaveSources({ calendarId: 'calendar', dept: '경영지원실',
     sourceDepts, supabase, token: 'test', serviceAccount: 'test', fetchImpl, now: new Date('2026-10-19T02:00:00Z'), ...options });
-  return { sync, events, writes, leaves, failReads: () => { failRead = true; } };
+  return { sync, events, writes, leaves, readFromDates, failReads: () => { failRead = true; } };
 }
+
+test('오래된 마지막 휴가가 취소돼도 해당 과거 구간을 조회하고 일정에서 제거한다', async () => {
+  const f = fixture();
+  f.leaves.splice(1);
+  f.leaves[0].start_date = '20200101';
+  f.leaves[0].end_date = '20200101';
+  await f.sync(['경영지원실']);
+  f.leaves[0].status = 'CANCELLED';
+  f.readFromDates.length = 0;
+  const result = await f.sync(['경영지원실']);
+  assert.equal(result.totalLeaves, 0);
+  assert.equal(result.deleted, 1);
+  assert.equal(f.readFromDates[0], '2019-12-31T15:00:00.000Z');
+  assert.deepEqual([...f.events.keys()], ['manual']);
+});
 
 test('선택 조직 추가·해제·재포함은 일정에 반영되고 반복 동기화는 중복 생성하지 않는다', async () => {
   const f = fixture();

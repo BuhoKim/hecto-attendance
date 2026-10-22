@@ -81,59 +81,10 @@ async function updateQueueRow(empNo, patch) {
 }
 
 async function syncLeavesForEmployee(conn, empNo) {
-  const rows = await queryMysql(conn, `
-    SELECT
-      y.I_EMPLOY_NO                AS emp_no,
-      e.N_EMPLOY_NAME              AS emp_name,
-      y.D_START_DATE               AS start_date,
-      y.D_END_DATE                 AS end_date,
-      y.I_CODE                     AS leave_code,
-      CAST(y.I_CODE AS CHAR)       AS leave_name,
-      CAST(y.O_ANNLEV_CNT AS CHAR) AS leave_days,
-      y.I_STATUS                   AS status
-    FROM hr_yuncha_use y
-    INNER JOIN hr_employee e ON e.I_COMPANY = y.I_COMPANY AND e.I_EMPLOY_NO = y.I_EMPLOY_NO
-    WHERE y.I_COMPANY = ?
-      AND y.I_EMPLOY_NO = ?
-      AND y.I_STATUS = '40'
-    ORDER BY y.D_START_DATE DESC, y.D_END_DATE DESC, y.I_CODE DESC
-  `, [COMPANY_CODE, empNo]);
-
-  if (rows.length === 0) {
-    return 0;
-  }
-
-  const records = rows.map((row) => ({
-    emp_no: row.emp_no,
-    emp_name: row.emp_name,
-    start_date: row.start_date,
-    end_date: row.end_date,
-    leave_code: row.leave_code,
-    leave_name: row.leave_name,
-    leave_days: parseFloat(row.leave_days) || 0,
-    status: row.status,
-    synced_at: new Date().toISOString(),
-  }));
-
-  const uniqueRecords = [];
-  const seen = new Set();
-  for (const r of records) {
-    const key = `${r.emp_no}_${r.start_date}_${r.leave_code}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueRecords.push(r);
-    }
-  }
-
-  const { error } = await supabase
-    .from('sa_leaves')
-    .upsert(uniqueRecords, { onConflict: 'emp_no,start_date,leave_code' });
-
-  if (error) {
-    throw new Error(`연차 백필 upsert 실패(${empNo}): ${error.message}`);
-  }
-
-  return uniqueRecords.length;
+  const { reconcileHrLeaves } = require('../src/lib/leaveReconciliation.cjs');
+  const result = await reconcileHrLeaves({ conn, supabase, companyCode: COMPANY_CODE, empNo, fullHistory: true });
+  log('INFO', `휴가 대조 완료 | 승인 ${result.total}건 | 추가·변경 ${result.changed}건 | 취소 ${result.revoked}건`);
+  return result.total;
 }
 
 async function processQueueOnce(conn) {

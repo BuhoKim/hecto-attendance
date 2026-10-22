@@ -19,6 +19,7 @@ function getNextCalendarDay(dateStr) {
  */
 
 const crypto = require('crypto');
+const profileCancellation = require('../src/lib/naverProfileCancellation.cjs');
 
 let cachedToken = null;
 let tokenExpiresAt = 0;
@@ -342,7 +343,7 @@ async function syncLeavesToNaverWorks(leavesWithEmails = []) {
   }
 
   // 가장 가까운 미래 연차가 가장 마지막에 등록(덮어쓰기)되도록 내림차순 정렬
-  const sortedLeaves = [...leavesWithEmails].sort((a, b) => {
+  const sortedLeaves = leavesWithEmails.filter((leave) => !leave.status || String(leave.status) === '40').sort((a, b) => {
     const aDate = String(a.start_date || a.startDate || '');
     const bDate = String(b.start_date || b.startDate || '');
     return bDate.localeCompare(aDate);
@@ -351,6 +352,16 @@ async function syncLeavesToNaverWorks(leavesWithEmails = []) {
   let processed = 0;
   let skipped = 0;
   let errors = 0;
+  let deleted = 0;
+
+  try {
+    deleted = await profileCancellation.removeCancelledProfileStatuses({
+      leaves: leavesWithEmails, getAccessToken, calculateWindow: calculateLeaveTimeWindow,
+    });
+  } catch (err) {
+    errors++;
+    console.error('[NaverWorks Sync Error] 휴가 상태 취소 실패:', err.message);
+  }
 
   for (const item of sortedLeaves) {
     try {
@@ -367,11 +378,11 @@ async function syncLeavesToNaverWorks(leavesWithEmails = []) {
     }
   }
 
-  if (processed > 0) {
-    console.log(`[NaverWorks Sync] 총 ${processed}건 상태 동기화 완료`);
+  if (processed > 0 || deleted > 0 || errors > 0) {
+    console.log(`[NaverWorks Sync] 상태 등록 ${processed}건 · 취소 삭제 ${deleted}건 · 실패 ${errors}건`);
   }
 
-  return { success: errors === 0, processed, skipped, errors };
+  return { success: errors === 0, processed, skipped, errors, deleted };
 }
 
 

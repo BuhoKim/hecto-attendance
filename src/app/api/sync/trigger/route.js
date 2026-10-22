@@ -4,6 +4,7 @@ import mysql from 'mysql2/promise';
 import { verifySession } from '@/lib/auth';
 import { getAdminClient } from '@/lib/supabaseClient';
 import { syncLeavesToNaverWorks } from '@/lib/naverWorks';
+import leaveReconciliation from '@/lib/leaveReconciliation.cjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -193,94 +194,32 @@ export async function GET(request) {
       }
     }
 
-    // ──────── 휴가 승인 내역 동기화 (±6개월) ────────
-    const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
-    const toDate = new Date(now.getFullYear(), now.getMonth() + 3, now.getDate());
-    const fromDateStr = `${fromDate.getFullYear()}${String(fromDate.getMonth() + 1).padStart(2, '0')}${String(fromDate.getDate()).padStart(2, '0')}`;
-    const toDateStr   = `${toDate.getFullYear()}${String(toDate.getMonth() + 1).padStart(2, '0')}${String(toDate.getDate()).padStart(2, '0')}`;
+    // 한국시간 기준 어제~7일 후 범위의 변경·취소를 대조한다.
+    const reconciled = await leaveReconciliation.reconcileHrLeaves({ conn, supabase, companyCode: MY_COMPANY_CODE });
+    const uniqueLeaveCount = reconciled.total;
+    const uniqueRecords = [...reconciled.approved, ...reconciled.cancelled];
+    try {
+      const empNos = [...new Set(uniqueRecords.map(r => r.emp_no))];
+      const { data: emps, error: empError } = await supabase
+        .from('sa_employees')
+        .select('emp_no, email, dept')
+        .eq('company_code', MY_COMPANY_CODE)
+        .in('emp_no', empNos);
 
-    const [leaveRows] = await conn.execute(`
-      SELECT
-        y.I_EMPLOY_NO          AS emp_no,
-        e.N_EMPLOY_NAME        AS emp_name,
-        d.N_DEPT               AS dept,
-        y.D_START_DATE         AS start_date,
-        y.D_END_DATE           AS end_date,
-        y.I_CODE               AS leave_code,
-        CAST(y.I_CODE AS CHAR) AS leave_name,
-        CAST(y.O_ANNLEV_CNT AS CHAR) AS leave_days,
-        y.I_STATUS             AS status
-      FROM hr_yuncha_use y
-      INNER JOIN hr_employee e ON
-        e.I_COMPANY = y.I_COMPANY AND e.I_EMPLOY_NO = y.I_EMPLOY_NO
-      INNER JOIN hr_department d ON
-        d.I_COMPANY = e.I_COMPANY AND d.I_DEPT = e.I_DEPT
-      WHERE y.I_COMPANY = ?
-        AND y.D_END_DATE >= ?
-        AND y.D_START_DATE <= ?
-    `, [MY_COMPANY_CODE, fromDateStr, toDateStr]);
+      if (empError) throw empError;
+      const empMap = new Map((emps || []).map(e => [String(e.emp_no), e]));
+      const leavesWithEmails = uniqueRecords.map(r => {
+        const emp = empMap.get(String(r.emp_no));
+        return {
+          ...r,
+          dept: emp?.dept || null,
+          email: emp?.email || null,
+        };
+      });
 
-    let uniqueLeaveCount = 0;
-    if (leaveRows.length > 0) {
-      const records = leaveRows.map(r => ({
-        emp_no:     r.emp_no,
-        emp_name:   r.emp_name,
-        start_date: r.start_date,
-        end_date:   r.end_date,
-        leave_code: r.leave_code,
-        leave_name: r.leave_name,
-        leave_days: parseFloat(r.leave_days) || 0,
-        status:     r.status,
-        synced_at:  new Date().toISOString(),
-      }));
-
-      const uniqueRecords = [];
-      const seen = new Set();
-      for (const r of records) {
-        const key = `${r.emp_no}_${r.start_date}_${r.leave_code}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueRecords.push(r);
-        }
-      }
-
-      const sourceKeys = new Set(uniqueRecords.map((r) => `${r.emp_no}_${r.start_date}_${r.leave_code}`));
-      const { data: existingLeaves, error: existingLeavesError } = await supabase
-        .from('sa_leaves')
-        .select('emp_no, start_date, end_date, leave_code')
-        .gte('end_date', fromDateStr)
-        .lte('start_date', toDateStr);
-      if (existingLeavesError) throw existingLeavesError;
-      const revokedRecords = (existingLeaves || [])
-        .filter((r) => !sourceKeys.has(`${r.emp_no}_${r.start_date}_${r.leave_code}`))
-        .map((r) => ({ ...r, status: 'CANCELLED', synced_at: new Date().toISOString() }));
-
-      const syncRecords = [...uniqueRecords, ...revokedRecords];
-      await supabase.from('sa_leaves').upsert(syncRecords, { onConflict: 'emp_no,start_date,leave_code' });
-      uniqueLeaveCount = uniqueRecords.length;
-
-      // 네이버웍스 프로필 상태 동기화
-      try {
-        const empNos = [...new Set(uniqueRecords.map(r => r.emp_no))];
-        const { data: emps } = await supabase
-          .from('sa_employees')
-          .select('emp_no, email, dept')
-          .in('emp_no', empNos);
-
-        const empMap = new Map((emps || []).map(e => [e.emp_no, e]));
-        const leavesWithEmails = uniqueRecords.map(r => {
-          const emp = empMap.get(r.emp_no);
-          return {
-            ...r,
-            dept: emp?.dept || null,
-            email: emp?.email || null,
-          };
-        });
-
-        await syncLeavesToNaverWorks(leavesWithEmails.filter((leave) => String(leave.status || '') === '40'));
-      } catch (nwErr) {
-        console.error('[Sync API Trigger NaverWorks Error]', nwErr.message);
-      }
+      await syncLeavesToNaverWorks(leavesWithEmails);
+    } catch (nwErr) {
+      console.error('[Sync API Trigger NaverWorks Error]', nwErr.message);
     }
 
     return NextResponse.json({
@@ -289,7 +228,9 @@ export async function GET(request) {
       stats: {
         employees: empRows.length,
         attendance: attRows.length,
-        leaves: uniqueLeaveCount
+        leaves: uniqueLeaveCount,
+        leavesChanged: reconciled.changed,
+        leavesCancelled: reconciled.revoked
       }
     });
 

@@ -11,20 +11,22 @@ export async function syncCalendarLeaveSources({ calendarId, dept, sourceDepts, 
   const future = new Date(now.getTime() + 180 * 86400000);
   const untilDay = new Date(future.getTime() + 9 * 3600000).toISOString().slice(0, 10);
   // Every past approved leave is included; only future leave is bounded.
-  const leaves = [];
+  const history = [];
   if (members.length) {
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await supabase.from('sa_leaves').select('*')
-        .in('emp_no', members.map((emp) => emp.empNo)).eq('status', '40')
+        .in('emp_no', members.map((emp) => emp.empNo))
         .gte('end_date', '19000101').lte('start_date', untilDay.replaceAll('-', ''))
         .order('id', { ascending: true }).range(offset, offset + 499);
       if (error) throw new Error(`휴가 목록 조회 실패: ${error.message}`);
-      leaves.push(...(data || []));
+      history.push(...(data || []));
       if ((data || []).length < 500) break;
     }
   }
-  // Read existing events from the earliest leave (at least the last 60 days).
-  const earliest = leaves.reduce((min, leave) => {
+  const leaves = history.filter((leave) => String(leave.status) === '40');
+  // Include cancelled history in the read window, even when no approved leave
+  // remains in that old period, so old cancelled calendar events are removed.
+  const earliest = history.reduce((min, leave) => {
     const day = formatCalendarDate(leave.start_date || leave.startDate);
     return /^\d{4}-\d{2}-\d{2}$/.test(day) && day < min ? day : min;
   }, new Date(now.getTime() - 60 * 86400000 + 9 * 3600000).toISOString().slice(0, 10));

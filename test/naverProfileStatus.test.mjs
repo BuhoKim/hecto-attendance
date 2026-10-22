@@ -1,10 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import daemon from '../sync/naverWorks.js';
-
-const source = await readFile(new URL('../src/lib/naverWorks.js', import.meta.url), 'utf8');
-const web = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+import * as web from '../src/lib/naverWorks.js';
 
 for (const [name, { calculateLeaveTimeWindow: window }] of [['web', web], ['daemon', daemon]]) {
   test(`${name}: full-day leave covers midnight through next midnight in every department`, () => {

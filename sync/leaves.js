@@ -113,58 +113,10 @@ async function syncEmployees(conn) {
 }
 
 async function syncLeaves(conn) {
-  const now = new Date();
-  const fromMonth = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const fromStr   = `${fromMonth.getFullYear()}${String(fromMonth.getMonth()+1).padStart(2,'0')}01`;
-
-  const rows = await query(conn, `
-    SELECT
-      y.I_EMPLOY_NO                AS emp_no,
-      e.N_EMPLOY_NAME              AS emp_name,
-      y.D_START_DATE               AS start_date,
-      y.D_END_DATE                 AS end_date,
-      y.I_CODE                     AS leave_code,
-      CAST(y.I_CODE AS CHAR)       AS leave_name,
-      CAST(y.O_ANNLEV_CNT AS CHAR) AS leave_days,
-      y.I_STATUS                   AS status
-    FROM hr_yuncha_use y
-    INNER JOIN hr_employee e ON e.I_COMPANY = y.I_COMPANY AND e.I_EMPLOY_NO = y.I_EMPLOY_NO
-    INNER JOIN hr_department d ON d.I_COMPANY = e.I_COMPANY AND d.I_DEPT = e.I_DEPT
-    WHERE y.I_COMPANY = ?
-      AND y.I_STATUS = '40'
-      AND y.D_END_DATE >= ?
-  `, [MY_COMPANY_CODE, fromStr]);
-
-  if (rows.length === 0) return 0;
-
-  const records = rows.map(r => ({
-    emp_no:     r.emp_no,
-    emp_name:   r.emp_name,
-    start_date: r.start_date,
-    end_date:   r.end_date,
-    leave_code: r.leave_code,
-    leave_name: r.leave_name,
-    leave_days: parseFloat(r.leave_days) || 0,
-    status:     r.status,
-    synced_at:  new Date().toISOString(),
-  }));
-
-  const uniqueRecords = [];
-  const seen = new Set();
-  for (const r of records) {
-    const key = `${r.emp_no}_${r.start_date}_${r.leave_code}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueRecords.push(r);
-    }
-  }
-
-  const { error } = await supabase
-    .from('SA_leaves')
-    .upsert(uniqueRecords, { onConflict: 'emp_no,start_date,leave_code' });
-
-  if (error) throw new Error(`연차 upsert 실패: ${error.message}`);
-  return uniqueRecords.length;
+  const { reconcileHrLeaves } = require('../src/lib/leaveReconciliation.cjs');
+  const result = await reconcileHrLeaves({ conn, supabase, companyCode: MY_COMPANY_CODE });
+  log('INFO', `휴가 대조 완료 (${result.window.from}~${result.window.to}) | 승인 ${result.total}건 | 추가·변경 ${result.changed}건 | 취소 ${result.revoked}건`);
+  return result.total;
 }
 
 async function runSync() {

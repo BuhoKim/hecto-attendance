@@ -399,80 +399,25 @@ async function syncCapsAttendance(conn) {
   return total;
 }
 
-// 4. 연차/휴가 내역 동기화 (최근 1일치)
+// 4. 한국시간 기준 어제~7일 후 휴가 대조 (변경·취소 포함)
 async function syncLeaves(conn) {
-  const now = new Date();
-  // 오늘부터 한 달 뒤까지의 승인된 연차를 매 회차 갱신한다.
-  const fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const toDate = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
-  const fromStr  = `${fromDate.getFullYear()}${String(fromDate.getMonth() + 1).padStart(2, '0')}${String(fromDate.getDate()).padStart(2, '0')}`;
-  const toStr    = `${toDate.getFullYear()}${String(toDate.getMonth() + 1).padStart(2, '0')}${String(toDate.getDate()).padStart(2, '0')}`;
+  const { reconcileHrLeaves } = require('../src/lib/leaveReconciliation.cjs');
+  const reconciled = await reconcileHrLeaves({ conn, supabase, companyCode: MY_COMPANY_CODE });
+  const uniqueRecords = [...reconciled.approved, ...reconciled.cancelled];
+  log('INFO', `휴가 대조 완료 (${reconciled.window.from}~${reconciled.window.to}) | 승인 ${reconciled.total}건 | 추가·변경 ${reconciled.changed}건 | 취소 ${reconciled.revoked}건 | 동일 ${reconciled.unchanged}건`);
 
-  const rows = await queryMysql(conn, `
-    SELECT
-      y.I_EMPLOY_NO                  AS emp_no,
-      e.N_EMPLOY_NAME                AS emp_name,
-      d.N_DEPT                       AS dept,
-      y.D_START_DATE                 AS start_date,
-      y.D_END_DATE                   AS end_date,
-      y.I_CODE                       AS leave_code,
-      CAST(y.I_CODE AS CHAR)         AS leave_name,
-      CAST(y.O_ANNLEV_CNT AS CHAR)   AS leave_days,
-      y.I_STATUS                     AS status
-    FROM hr_yuncha_use y
-    INNER JOIN hr_employee e ON e.I_COMPANY = y.I_COMPANY AND e.I_EMPLOY_NO = y.I_EMPLOY_NO
-    INNER JOIN hr_department d ON d.I_COMPANY = e.I_COMPANY AND d.I_DEPT = e.I_DEPT
-    WHERE y.I_COMPANY = ?
-      AND y.I_STATUS = '40'
-      AND y.D_END_DATE >= ?
-      AND y.D_START_DATE <= ?
-  `, [MY_COMPANY_CODE, fromStr, toStr]);
-
-  if (rows.length === 0) return 0;
-
-  const records = rows.map(r => ({
-    emp_no:     r.emp_no,
-    emp_name:   r.emp_name,
-    dept:       r.dept,
-    start_date: r.start_date,
-    end_date:   r.end_date,
-    leave_code: r.leave_code,
-    leave_name: r.leave_name,
-    leave_days: parseFloat(r.leave_days) || 0,
-    status:     r.status,
-    synced_at:  new Date().toISOString(),
-  }));
-
-  const uniqueRecords = [];
-  const seen = new Set();
-  for (const r of records) {
-    const key = `${r.emp_no}_${r.start_date}_${r.leave_code}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueRecords.push(r);
-    }
-  }
-
-  // DB upsert 시에는 sa_leaves 스키마에 없는 dept 컬럼 제거
-  const recordsForDb = uniqueRecords.map(({ dept, ...rest }) => rest);
-  const { error } = await supabase
-    .from('sa_leaves')
-    .upsert(recordsForDb, { onConflict: 'emp_no,start_date,leave_code' });
-
-  if (error) throw new Error(`연차 upsert 실패: ${error.message}`);
-
-  // 네이버웍스 프로필 상태 동기화
   try {
     const empNos = [...new Set(uniqueRecords.map(r => r.emp_no))];
-    const { data: emps } = await supabase
+    const { data: emps, error: empError } = await supabase
       .from('sa_employees')
       .select('emp_no, email, dept')
       .eq('company_code', MY_COMPANY_CODE)
       .in('emp_no', empNos);
 
-    const empMap = new Map((emps || []).map(e => [e.emp_no, e]));
+    if (empError) throw empError;
+    const empMap = new Map((emps || []).map(e => [String(e.emp_no), e]));
     const leavesWithEmails = uniqueRecords.map(r => {
-      const emp = empMap.get(r.emp_no);
+      const emp = empMap.get(String(r.emp_no));
       return {
         ...r,
         dept: r.dept || emp?.dept || null,
@@ -488,7 +433,7 @@ async function syncLeaves(conn) {
     console.error('[NaverWorks Sync Error]', nwErr.message);
   }
 
-  return uniqueRecords.length;
+  return reconciled.total;
 }
 
 // ── 메인 루프 ─────────────────────────────────────────────────────
