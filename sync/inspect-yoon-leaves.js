@@ -60,7 +60,7 @@ async function main(argv = process.argv.slice(2)) {
         I_CODE: row.I_CODE, D_START_DATE: row.D_START_DATE, D_END_DATE: row.D_END_DATE,
         I_STATUS: row.I_STATUS, O_ANNLEV_CNT: row.O_ANNLEV_CNT,
       })));
-      console.log('51: 연차 / 17: 오후 반차 / I_STATUS 40: 승인. 그 외 코드·취소 필드는 원본 값으로 확인합니다.');
+      console.log('51: 공가 [오전] / 17: 오후 반차 / I_STATUS 40: 승인. 그 외 코드·취소 필드는 원본 값으로 확인합니다.');
       console.log('아래는 원본 전체 칼럼입니다. 결과를 보내 주세요.');
     }
     console.log(JSON.stringify({ date: date.dashed, company: COMPANY, empNo: EMP_NO, employees, rows },

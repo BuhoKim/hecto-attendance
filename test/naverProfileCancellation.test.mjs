@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import cancellation from '../src/lib/naverProfileCancellation.cjs';
 import daemon from '../sync/naverWorks.js';
 
-const leave = (patch = {}) => ({ email: 'employee@example.com', start_date: '20261023', end_date: '20261023', leave_code: '51', status: 'CANCELLED', ...patch });
+const leave = (patch = {}) => ({ email: 'employee@example.com', start_date: '20261023', end_date: '20261023', leave_code: '12', status: 'CANCELLED', ...patch });
 const window = daemon.calculateLeaveTimeWindow(leave());
 const status = { ...window, userProfileStatusId: 'cancelled-status' };
 const now = new Date('2026-10-23T00:00:00Z').getTime();
@@ -27,7 +27,7 @@ test('cancelled leave clears current/reserved matching status while keeping unre
 });
 
 test('equivalent approved leave protects an active status from cancellation of an older leave code', async () => {
-  const f = sync([leave(), leave({ leave_code: '12', status: '40' })], [status]);
+  const f = sync([leave(), leave({ leave_code: '60', status: '40' })], [status]);
   assert.equal(await f.run(), 0);
   assert.deepEqual(f.writes, []);
 });

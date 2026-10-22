@@ -177,7 +177,7 @@ const LEAVE_CODE_LABELS = {
   '26': '2시간 휴가 [15-17]',
   '27': '2시간 휴가 [16-18]',
   '28': '2시간 휴가 [17-19]',
-  '51': '연차',
+  '51': '공가 [오전]',
   '60': '연차',
   '61': '오전 반차',
   '62': '오후 반차',
@@ -214,14 +214,14 @@ function calculateLeaveTimeWindow(leave) {
   let endTime = `${getNextCalendarDay(endDateStr)}T00:00:00+09:00`;
   let statusMessage = LEAVE_CODE_LABELS[code] || (rawName && !/^\d+$/.test(rawName) ? rawName : '연차');
 
-  if (code === '16' || code === '61' || rawName.includes('오전') || rawName.includes('4시간휴가 [오전]')) {
+  if (code === '51' || code === '16' || code === '61' || rawName.includes('오전') || rawName.includes('4시간휴가 [오전]')) {
     startTime = isSpecialTeam
       ? `${startDateStr}T10:00:00+09:00`
       : `${startDateStr}T08:00:00+09:00`;
     endTime = isSpecialTeam
       ? `${startDateStr}T15:00:00+09:00`
       : `${startDateStr}T12:00:00+09:00`;
-    statusMessage = '오전 반차';
+    statusMessage = code === '51' ? '공가 [오전]' : '오전 반차';
   } else if (code === '17' || code === '62' || rawName.includes('오후') || rawName.includes('4시간휴가 [오후]')) {
     startTime = isSpecialTeam
       ? `${startDateStr}T15:00:00+09:00`

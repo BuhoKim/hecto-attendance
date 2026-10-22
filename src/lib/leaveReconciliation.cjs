@@ -59,7 +59,7 @@ async function reconcileHrLeaves({ conn, supabase, companyCode, empNo = null, no
   for (const row of source) {
     const record = { emp_no: text(row.emp_no), emp_name: row.emp_name,
       start_date: text(row.start_date), end_date: text(row.end_date),
-      leave_code: text(row.leave_code), leave_name: text(row.leave_name),
+      leave_code: text(row.leave_code), leave_name: text(row.leave_code) === '51' ? '공가 [오전]' : text(row.leave_name),
       leave_days: Number.parseFloat(row.leave_days) || 0, status: text(row.status),
       dept: row.dept, synced_at: stamp };
     if (!/^\d{8}$/.test(record.start_date) || !/^\d{8}$/.test(record.end_date)

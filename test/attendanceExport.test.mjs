@@ -98,7 +98,7 @@ test('attendance workbook gives the status column enough width for leave labels'
   assert.equal(ATTENDANCE_WORKBOOK_COLUMN_WIDTHS[5], 24);
 });
 
-test('buildAttendanceTableRows shows leave_name from the attendance API in the annual leave column', () => {
+test('buildAttendanceTableRows displays code 51 as morning public leave', () => {
   const rows = buildAttendanceTableRows({
     fromDate: '2026-08-04',
     toDate: '2026-08-04',
@@ -106,8 +106,8 @@ test('buildAttendanceTableRows shows leave_name from the attendance API in the a
     leaves: [{ emp_no: '001', start_date: '2026-08-04', end_date: '2026-08-04', leave_code: '51', leave_name: '51', leave_days: 1 }],
   });
 
-  assert.equal(rows[0].상태, '연차');
-  assert.equal(rows[0].연차사용내역, '연차');
+  assert.equal(rows[0].상태, '공가 [오전]');
+  assert.equal(rows[0].연차사용내역, '공가 [오전]');
 });
 
 test('buildAttendanceTableRows matches compact DB leave dates', () => {

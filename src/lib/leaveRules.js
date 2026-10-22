@@ -163,6 +163,7 @@ export function normalizeLeaveName(leave) {
   const code = String(leave?.leaveCode ?? leave?.leave_code ?? '').trim();
   const rawName = String(leave?.leaveName ?? leave?.leave_name ?? '').trim();
   const mappedName = LEAVE_CODE_DISPLAY_LABELS[code] || '';
+  if (code === '51') return mappedName;
 
   if (!rawName) return mappedName;
   if (/^\d+$/.test(rawName)) {
@@ -192,7 +193,7 @@ const LEAVE_CODE_DISPLAY_LABELS = {
   '26': '2시간휴가H [15-17]',
   '27': '2시간휴가I [16-18]',
   '28': '2시간휴가J [17-19]',
-  '51': '연차',
+  '51': '공가 [오전]',
   '60': '1년미만연차',
   '61': '1년미만 4시간휴가 [오전]',
   '62': '1년미만 4시간휴가 [오후]',
@@ -257,8 +258,8 @@ export function normalizeLeaveType(leave) {
   const compact = name.replace(/\s+/g, '');
 
   if (/경조/.test(name) || code === '18') return '경조휴가';
-  if (/공가/.test(name) || code === '13') return '공가';
-  if (/연차/.test(name) || code === '12' || code === '51') return '연차';
+  if (/공가/.test(name) || code === '13' || code === '51') return '공가';
+  if (/연차/.test(name) || code === '12') return '연차';
   if (/2시간휴가/.test(compact)) {
     const rangeMatch = name.match(/\[(\d{2})(?::?(\d{2}))?[~-](\d{2})(?::?(\d{2}))?\]/);
     if (rangeMatch) {

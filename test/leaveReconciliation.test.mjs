@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import reconciliation from '../src/lib/leaveReconciliation.cjs';
 
 const leave = (patch = {}) => ({ emp_no: '1', emp_name: '직원', start_date: '20261022',
-  end_date: '20261022', leave_code: '51', leave_name: '51', leave_days: 1, status: '40', ...patch });
+  end_date: '20261022', leave_code: '12', leave_name: '12', leave_days: 1, status: '40', ...patch });
 
 function fixture({ source = [], existing = [], employees = [{ emp_no: '1', company_code: '1600' }], roster = [{ emp_no: '1' }] } = {}) {
   const writes = [], queries = [];
@@ -171,4 +171,12 @@ test('explicit historical employee backfill can still reconcile old history', as
   assert.equal(result.window, null);
   assert.equal(result.total, 1);
   assert.doesNotMatch(f.queries[1].sql, /D_END_DATE >=/);
+});
+
+test('numeric HR name for code 51 stays stored as morning public leave on repeated sync', async () => {
+  const f = fixture({ source: [leave({ leave_code: '51', leave_name: '51' })],
+    existing: [leave({ leave_code: '51', leave_name: '연차' })] });
+  assert.equal((await f.sync()).changed, 1);
+  assert.equal(f.rows[0].leave_name, '공가 [오전]');
+  assert.equal((await f.sync()).changed, 0);
 });
