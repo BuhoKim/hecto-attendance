@@ -208,12 +208,9 @@ function calculateLeaveTimeWindow(leave) {
 
   const isSpecialTeam = isBusinessManagementTeam(dept);
 
-  let startTime = isSpecialTeam
-    ? `${startDateStr}T10:00:00+09:00`
-    : `${startDateStr}T08:00:00+09:00`;
-  let endTime = isSpecialTeam
-    ? `${endDateStr}T19:00:00+09:00`
-    : `${endDateStr}T17:00:00+09:00`;
+  // 종일 휴가는 한국 시간 자정부터 마지막 휴가일 다음 날 자정까지 표시한다.
+  let startTime = `${startDateStr}T00:00:00+09:00`;
+  let endTime = `${getNextCalendarDay(endDateStr)}T00:00:00+09:00`;
   let statusMessage = LEAVE_CODE_LABELS[code] || (rawName && !/^\d+$/.test(rawName) ? rawName : '연차');
 
   if (code === '16' || code === '61' || rawName.includes('오전') || rawName.includes('4시간휴가 [오전]')) {
