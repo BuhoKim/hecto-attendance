@@ -58,7 +58,7 @@ test('read-only connection check exits unsuccessfully on a stale PM2 destination
 });
 
 test('every attendance, employee and leave writer rejects the old project before starting', () => {
-  for (const name of ['index.js', 'index3days.js', 'index15days.js', 'index30days.js', 'attendance.js', 'caps.js', 'employees.js', 'leaves.js', 'backfill-leaves.js', 'backfill-attendance-range.js', 'backfill-caps-attendance-range.js', 'backfill-caps-by-name.js']) {
+  for (const name of ['index.js', 'index3days.js', 'index15days.js', 'index30days.js', 'attendance.js', 'caps.js', 'employees.js', 'leaves.js', 'backfill-leaves.js', 'backfill-attendance-range.js', 'backfill-attendance-2025.js', 'backfill-caps-attendance-range.js', 'backfill-caps-by-name.js']) {
     const result = runScript(name);
     assert.equal(result.status, 1, name);
     assert.match(result.stderr, /SUPABASE_URL.*qcpqcuzvirmbjzqjzapt/, name);
