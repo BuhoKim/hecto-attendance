@@ -9,7 +9,7 @@ function getLeaveReconciliationWindow(now = new Date()) {
   const day = new Date(now.getTime() + 9 * 3600000).toISOString().slice(0, 10);
   const midnight = Date.parse(`${day}T00:00:00Z`);
   const compact = (offset) => new Date(midnight + offset * 86400000).toISOString().slice(0, 10).replaceAll('-', '');
-  return { from: compact(-1), to: compact(7) };
+  return { from: compact(-1), to: compact(30) };
 }
 
 async function readAll(query) {

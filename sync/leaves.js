@@ -9,6 +9,7 @@ loadSyncEnv();
 const mysql = require('mysql2/promise');
 const { createSyncSupabaseClient } = require('./supabaseClient');
 const { employeeStateFromMysqlRow } = require('./employeeState');
+const { syncDepartmentCalendars, isNaverWorksConfigured } = require('./naverWorks');
 
 const SYNC_INTERVAL_MS = parseInt(process.env.LEAVES_SYNC_INTERVAL_MS) || 600_000; // 10분
 const MY_COMPANY_CODE  = process.env.MY_COMPANY_CODE || '1600';
@@ -120,6 +121,11 @@ async function syncLeaves(conn) {
 }
 
 async function runSync() {
+  if (runSync.inProgress) {
+    log('WARN', 'Previous sync is still running; skipping this cycle');
+    return;
+  }
+  runSync.inProgress = true;
   const start = Date.now();
   log('INFO', '동기화 시작');
 
@@ -129,6 +135,12 @@ async function runSync() {
 
     const empCount   = await syncEmployees(conn);
     const leaveCount = await syncLeaves(conn);
+    if (isNaverWorksConfigured()) {
+      const calendarResult = await syncDepartmentCalendars(supabase);
+      if (!calendarResult.success) log('WARN', 'Calendar sync failed', calendarResult.error || `${calendarResult.failed} failures`);
+    } else {
+      log('WARN', 'Naver Works configuration missing; calendar sync skipped');
+    }
 
     log('INFO', `완료 (${((Date.now()-start)/1000).toFixed(1)}s)`,
       `직원 ${empCount}명 | 연차 ${leaveCount}건`);
@@ -137,7 +149,7 @@ async function runSync() {
     // MySQL 실패는 경고만 — 출입기록 sync(attendance.js)와 독립
     log('WARN', 'MySQL 연결 실패, 다음 주기에 재시도', err.message);
   } finally {
-    if (conn) await conn.end();
+    try { if (conn) await conn.end(); } finally { runSync.inProgress = false; }
   }
 }
 

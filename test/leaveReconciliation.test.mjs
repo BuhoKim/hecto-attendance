@@ -135,10 +135,10 @@ test('individual employee backfill reconciles only that employee and accepts dup
 
 test('comparison window follows KST midnight and handles month/year/leap boundaries', () => {
   for (const [now, from, to] of [
-    ['2026-10-22T14:59:59Z', '20261021', '20261029'],
-    ['2026-10-22T15:00:00Z', '20261022', '20261030'],
-    ['2026-12-31T15:00:00Z', '20261231', '20270108'],
-    ['2028-02-29T15:00:00Z', '20280229', '20280308'],
+    ['2026-10-22T14:59:59Z', '20261021', '20261121'],
+    ['2026-10-22T15:00:00Z', '20261022', '20261122'],
+    ['2026-12-31T15:00:00Z', '20261231', '20270131'],
+    ['2028-02-29T15:00:00Z', '20280229', '20280331'],
   ]) assert.deepEqual(reconciliation.getLeaveReconciliationWindow(new Date(now)), { from, to });
 });
 
@@ -146,13 +146,13 @@ test('both boundaries and spanning leaves are included; older/later rows are pre
   const f = fixture({ existing: [
     leave({ start_date: '20261021', end_date: '20261021' }),
     leave(),
-    leave({ start_date: '20261030', end_date: '20261030' }),
-    leave({ start_date: '20261031', end_date: '20261031' }),
+    leave({ start_date: '20261122', end_date: '20261122' }),
+    leave({ start_date: '20261123', end_date: '20261123' }),
     leave({ start_date: '20261001', end_date: '20261101' }),
   ] });
   assert.equal((await f.sync()).revoked, 3);
   assert.deepEqual(f.rows.map((row) => row.status), ['40', 'CANCELLED', 'CANCELLED', '40', 'CANCELLED']);
-  assert.deepEqual(f.queries[1].params, ['1600', '20261022', '20261030']);
+  assert.deepEqual(f.queries[1].params, ['1600', '20261022', '20261122']);
 });
 
 test('approved spanning leave retains its full period across the window', async () => {
