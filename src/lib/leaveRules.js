@@ -1,47 +1,5 @@
 import { getHolidayNameByDate } from './holidayCalendar.js';
 
-const HOLIDAYS_2025 = {
-  '2025-01-01': '신정',
-  '2025-01-28': '설날연휴',
-  '2025-01-29': '설날',
-  '2025-01-30': '설날연휴',
-  '2025-03-01': '삼일절',
-  '2025-05-05': '어린이날',
-  '2025-05-06': '어린이날 대체공휴일',
-  '2025-05-15': '부처님오신날',
-  '2025-06-06': '현충일',
-  '2025-08-15': '광복절',
-  '2025-10-03': '개천절',
-  '2025-10-05': '추석연휴',
-  '2025-10-06': '추석',
-  '2025-10-07': '추석연휴',
-  '2025-10-08': '대체공휴일',
-  '2025-10-09': '한글날',
-  '2025-12-25': '성탄절',
-};
-
-const HOLIDAYS_2026 = {
-  '2026-01-01': '신정',
-  '2026-02-16': '설날연휴',
-  '2026-02-17': '설날',
-  '2026-02-18': '설날연휴',
-  '2026-03-01': '삼일절',
-  '2026-05-05': '어린이날',
-  '2026-05-24': '부처님오신날',
-  '2026-05-25': '부처님오신날 대체공휴일',
-  '2026-06-03': '지방선거',
-  '2026-06-06': '현충일',
-  '2026-08-15': '광복절',
-  '2026-09-24': '추석연휴',
-  '2026-09-25': '추석',
-  '2026-09-26': '추석연휴',
-  '2026-10-03': '개천절',
-  '2026-10-09': '한글날',
-  '2026-12-25': '성탄절',
-};
-
-const ALL_HOLIDAYS = { ...HOLIDAYS_2025, ...HOLIDAYS_2026 };
-
 export const CALENDAR_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 export const CALENDAR_LEGENDS = [
@@ -142,13 +100,13 @@ export const LEAVE_DASHBOARD_GROUPS = [
 ];
 
 export function getHolidayName(dateStr) {
-  return getHolidayNameByDate(dateStr) || ALL_HOLIDAYS[dateStr] || null;
+  return getHolidayNameByDate(dateStr) || null;
 }
 
 export function isDateHoliday(dateStr) {
   const d = new Date(dateStr);
   const day = d.getDay();
-  return day === 0 || day === 6 || !!getHolidayNameByDate(dateStr) || !!ALL_HOLIDAYS[dateStr];
+  return day === 0 || day === 6 || !!getHolidayNameByDate(dateStr);
 }
 
 const normalizeDept = (value = '') => String(value || '').trim().replace(/\s+/g, '');

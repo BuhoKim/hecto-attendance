@@ -1,4 +1,4 @@
-import Holidays from 'date-holidays';
+import { buildFallbackHolidayMap } from './holidayFallback.mjs';
 
 const holidayYearCache = new Map();
 const fallbackYearCache = new Map();
@@ -43,50 +43,11 @@ const emitChange = () => {
   });
 };
 
-const normalizeDateRange = (startValue, endValue) => {
-  const startKey = toDateKey(startValue);
-  const endKey = toDateKey(endValue);
-  const start = startKey ? new Date(`${startKey}T00:00:00+09:00`) : new Date('invalid');
-  const end = endKey ? new Date(`${endKey}T00:00:00+09:00`) : new Date('invalid');
-  if (Number.isNaN(start.getTime())) return [];
-  if (Number.isNaN(end.getTime()) || end <= start) return [startKey];
-
-  const dates = [];
-  const cursor = new Date(start);
-  while (cursor < end) {
-    dates.push(formatDateKeyInKst(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
-};
-
 const buildFallbackYearCache = (year) => {
   const yearKey = normalizeYearKey(year);
   if (!yearKey) return {};
-  if (fallbackYearCache.has(yearKey)) return fallbackYearCache.get(yearKey);
-
-  const hd = new Holidays('KR');
-  const map = {};
-  const items = Array.isArray(hd.getHolidays(Number(yearKey))) ? hd.getHolidays(Number(yearKey)) : [];
-
-  items.forEach((item) => {
-    const name = String(item?.name || '').trim();
-    if (!name) return;
-
-    const startKey = toDateKey(item?.date || item?.start);
-    const endKey = toDateKey(item?.end);
-
-    if (!startKey) return;
-
-    const dateKeys = normalizeDateRange(startKey, endKey);
-    dateKeys.forEach((dateKey) => {
-      if (!dateKey) return;
-      map[dateKey] = name;
-    });
-  });
-
-  fallbackYearCache.set(yearKey, map);
-  return map;
+  if (!fallbackYearCache.has(yearKey)) fallbackYearCache.set(yearKey, buildFallbackHolidayMap(Number(yearKey)));
+  return fallbackYearCache.get(yearKey);
 };
 
 export function subscribeHolidayCalendar(listener) {
@@ -113,8 +74,7 @@ export function applyHolidayYearCache(year, holidayMap = {}) {
   const yearKey = normalizeYearKey(year);
   if (!yearKey) return;
 
-  const current = holidayYearCache.get(yearKey) || {};
-  const next = { ...current };
+  const next = {};
 
   Object.entries(holidayMap || {}).forEach(([dateKey, holidayName]) => {
     const normalizedDateKey = toDateKey(dateKey);
@@ -151,7 +111,7 @@ export function getHolidayNameByDate(dateStr) {
   if (!dateKey) return null;
   const yearKey = dateKey.slice(0, 4);
   const yearCache = holidayYearCache.get(yearKey);
-  return yearCache?.[dateKey] || buildFallbackYearCache(yearKey)?.[dateKey] || null;
+  return yearCache ? (yearCache[dateKey] || null) : (buildFallbackYearCache(yearKey)?.[dateKey] || null);
 }
 
 export function getHolidayDateMapByYear(year) {

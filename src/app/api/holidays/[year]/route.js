@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import Holidays from 'date-holidays';
+import { buildFallbackHolidayMap } from '@/lib/holidayFallback.mjs';
 import { publicErrorMessage } from '@/lib/apiError.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -15,8 +15,10 @@ const getServiceKey = () =>
 const normalizeServiceKey = (value) => {
   const key = String(value || '').trim();
   if (!key) return '';
-  if (/%[0-9A-Fa-f]{2}/.test(key)) return key;
-  return encodeURIComponent(key);
+  if (/%[0-9A-Fa-f]{2}/.test(key)) {
+    try { return decodeURIComponent(key); } catch { return key; }
+  }
+  return key;
 };
 
 const normalizeDateKey = (locdate) => {
@@ -30,19 +32,6 @@ const normalizeDateKey = (locdate) => {
 const normalizeItemList = (items) => {
   if (!items) return [];
   return Array.isArray(items) ? items : [items];
-};
-
-const buildFallbackHolidayMap = (year) => {
-  const hd = new Holidays('KR');
-  const map = {};
-  const items = normalizeItemList(hd.getHolidays(year));
-  items.forEach((item) => {
-    const dateKey = normalizeDateKey(item?.date || item?.start);
-    const name = String(item?.name || '').trim();
-    if (!dateKey || !name) return;
-    map[dateKey] = name;
-  });
-  return map;
 };
 
 const extractHolidayMapFromApiResponse = (payload) => {
@@ -87,6 +76,9 @@ async function fetchHolidayMonth(year, month, serviceKey) {
     throw new Error(json?.response?.header?.resultMsg || json?.error || '공휴일 API 요청에 실패했습니다.');
   }
 
+  const code = String(json?.response?.header?.resultCode ?? '');
+  if (code && code !== '00' && code !== '0000') throw new Error('??? API ?? ??');
+  if (!json?.response?.body) throw new Error('??? API ?? ?? ??');
   return extractHolidayMapFromApiResponse(json);
 }
 
@@ -107,11 +99,12 @@ export async function GET(_request, context) {
         Array.from({ length: 12 }, (_, index) => fetchHolidayMonth(year, index + 1, serviceKey))
       );
 
-      holidays = monthResults.reduce((acc, result) => {
+      const allMonthsSucceeded = monthResults.every((result) => result.status === 'fulfilled');
+      holidays = allMonthsSucceeded ? monthResults.reduce((acc, result) => {
         if (result.status !== 'fulfilled' || !result.value) return acc;
         return { ...acc, ...result.value };
-      }, {});
-      source = 'data.go.kr';
+      }, {}) : {};
+      source = allMonthsSucceeded ? 'data.go.kr' : 'data.go.kr+fallback';
     }
 
     if (Object.keys(holidays).length === 0) {
