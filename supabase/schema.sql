@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS SA_leaves (
   leave_code  VARCHAR(10),
   leave_name  VARCHAR(100),
   leave_days  DECIMAL(5,3),
-  status      VARCHAR(5),
+  status      VARCHAR(20),             -- 원본 상태 코드 및 CANCELLED
   synced_at   TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (emp_no, start_date, leave_code)
 );
