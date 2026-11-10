@@ -3,12 +3,16 @@ const { loadSyncEnv } = require('./loadEnv');
 const { createSyncSupabaseClient } = require('./supabaseClient');
 const mysql = require('mysql2/promise');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { execFileSync } = require('child_process');
 
 const URL = 'https://lzsfdbspvypljsyviakh.supabase.co/rest/v1/rpc/whr_ingest';
 const PUBLIC_KEY = 'sb_publishable_pEMmU4vVPtn7EteLHpOByw_nJZiCpQc';
 const PAGE = 500;
 const INTERVAL = 180000;
+const OVERLAP = 5 * 60000;
 const SNAPSHOT_INTERVAL = 30 * 60000;
 const TABLES = {
   sa_leaves: ['id', 'emp_no,start_date,end_date,leave_code,leave_name,status'],
@@ -86,9 +90,9 @@ async function stableSnapshot(db, table, columns, order, since) {
   if (hash(first) !== hash(second)) throw new Error(`${table}: 조회 중 원본 변경, 다음 주기 재시도`);
   return normalize(table, second);
 }
-async function readAttendance(conn, from) {
+async function readAttendance(conn, from, to = new Date().toISOString()) {
   const fromStr = compactKst(from);
-  const toStr = compactKst(new Date().toISOString());
+  const toStr = compactKst(to);
   const [secom] = await conn.execute(`SELECT e.I_EMPLOY_NO AS emp_no, t.ATime AS a_time FROM t_secom_alarm t INNER JOIN hr_employee e ON e.I_COMPANY = ? AND t.Sabun IS NOT NULL AND t.Sabun <> '' AND e.I_COMPANY = LEFT(t.Sabun, 4) AND e.I_EMPLOY_NO = RIGHT(t.Sabun, 8) INNER JOIN hr_department d ON d.I_COMPANY = ? AND d.I_DEPT = e.I_DEPT WHERE COALESCE(e.I_RETIRE_YN, '0') <> '1' AND t.ATime >= ? AND t.ATime <= ?`, ['1600', '1600', fromStr, toStr]);
   const date = fromStr.slice(0, 8), time = fromStr.slice(8), toDate = toStr.slice(0, 8), toTime = toStr.slice(8);
   const [caps] = await conn.execute(`SELECT e.I_EMPLOY_NO AS emp_no, t.E_DATE AS e_date, t.E_TIME AS e_time FROM tenter t INNER JOIN hr_employee e ON e.I_COMPANY = ? AND t.E_IDNO IS NOT NULL AND t.E_IDNO <> '' AND e.I_COMPANY = LEFT(t.E_IDNO, 4) AND e.I_EMPLOY_NO = RIGHT(t.E_IDNO, 8) INNER JOIN hr_department d ON d.I_COMPANY = ? AND d.I_DEPT = e.I_DEPT WHERE COALESCE(e.I_RETIRE_YN, '0') <> '1' AND t.E_GROUP = ? AND (t.E_DATE > ? OR (t.E_DATE = ? AND LPAD(REPLACE(CAST(t.E_TIME AS CHAR), ':', ''), 6, '0') >= ?)) AND (t.E_DATE < ? OR (t.E_DATE = ? AND LPAD(REPLACE(CAST(t.E_TIME AS CHAR), ':', ''), 6, '0') <= ?))`, ['1600', '1600', '08', date, date, time, toDate, toDate, toTime]);
@@ -98,28 +102,63 @@ async function readAttendance(conn, from) {
   }));
   return [...new Map(combined.map(r => [`${r.emp_no}|${r.log_time}`, r])).values()];
 }
+function checkpointPath() {
+  return path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), '.local', 'share'), 'hecto-sync', 'hr-hub-attendance-checkpoint.json');
+}
+function loadCheckpoint(file) {
+  let contents;
+  try { contents = fs.readFileSync(file, 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  let state;
+  try { state = JSON.parse(contents); } catch { throw new Error('출입 체크포인트 파일이 손상됐습니다'); }
+  if (state.version !== 1 || typeof state.successThrough !== 'string' || !Number.isFinite(Date.parse(state.successThrough))) throw new Error('출입 체크포인트 형식이 올바르지 않습니다');
+  return state.successThrough;
+}
+function saveCheckpoint(file, successThrough) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${crypto.randomBytes(8).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify({ version: 1, successThrough }), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    fs.renameSync(tmp, file);
+  } finally { try { fs.unlinkSync(tmp); } catch (e) { if (e.code !== 'ENOENT') throw e; } }
+}
+async function syncIncremental({ read, sendBatch, load, save, now = new Date() }) {
+  const to = new Date(Math.floor(now.getTime() / 1000) * 1000);
+  if (!Number.isFinite(to.getTime())) throw new Error('서버 시계가 올바르지 않습니다');
+  const previous = load();
+  if (previous && Date.parse(previous) > to.getTime()) throw new Error('체크포인트가 현재 시각보다 미래입니다. 서버 시계를 확인하세요');
+  const from = previous ? new Date(Date.parse(previous) - OVERLAP).toISOString() : kstStart(3, to);
+  const rows = await read(from, to.toISOString());
+  let written = 0;
+  for (let i = 0; i < rows.length; i += 500) written += (await sendBatch(rows.slice(i, i + 500))).written;
+  save(to.toISOString());
+  return { queried: rows.length, written, from, to: to.toISOString() };
+}
+async function readSourceWithTimeout(from, to) {
+  let conn, timeout;
+  try {
+    conn = await mysql.createConnection({ host: process.env.MYSQL_HOST, user: process.env.MYSQL_USER, password: process.env.MYSQL_PASSWORD, database: process.env.MYSQL_DATABASE, port: Number(process.env.MYSQL_PORT) || 3306, connectTimeout: 15000 });
+    return await Promise.race([
+      readAttendance(conn, from, to),
+      new Promise((_, reject) => { timeout = setTimeout(() => { conn.destroy(); reject(new Error('원본 출입 조회 시간 초과')); }, 60000); }),
+    ]);
+  } finally { clearTimeout(timeout); if (conn) await conn.end().catch(() => {}); }
+}
 async function run() {
   loadSyncEnv();
   const key = readKey();
   if (!key) throw new Error('HR_HUB_INGEST_KEY가 설정되지 않았습니다');
   const db = createSyncSupabaseClient();
-  let lastSnapshots = 0, lastCorrectionDate = '', sourceSnapshot = null;
+  let lastSnapshots = 0, lastCorrectionDate = '';
   let attendanceBusy = false, snapshotsBusy = false;
   const failed = (section, e) => console.error(`[인사연동] ${section} 실패: ${e.message}`);
   async function attendanceCycle() {
     if (attendanceBusy) return; attendanceBusy = true;
-    let conn, timeout;
       try {
-        conn = await mysql.createConnection({ host: process.env.MYSQL_HOST, user: process.env.MYSQL_USER, password: process.env.MYSQL_PASSWORD, database: process.env.MYSQL_DATABASE, port: Number(process.env.MYSQL_PORT) || 3306, connectTimeout: 15000 });
-        const rows = await Promise.race([
-          readAttendance(conn, kstStart(3)),
-          new Promise((_, reject) => { timeout = setTimeout(() => { conn.destroy(); reject(new Error('원본 출입 조회 시간 초과')); }, 60000); }),
-        ]);
-        clearTimeout(timeout); timeout = null;
-        sourceSnapshot = { rows, at: Date.now() };
-        for (let i=0;i<rows.length;i+=500) await send(key, 'sa_attendance', rows.slice(i,i+500), 'append');
-        console.log(`[인사연동] 원본 출입 전송 ${rows.length}건`);
-      } catch(e) { failed('원본 출입',e); } finally { clearTimeout(timeout); if (conn) await conn.end().catch(()=>{}); attendanceBusy = false; }
+        const file = checkpointPath();
+        const result = await syncIncremental({ read: readSourceWithTimeout, sendBatch: rows => send(key, 'sa_attendance', rows, 'append'), load: () => loadCheckpoint(file), save: value => saveCheckpoint(file, value) });
+        console.log(`[인사연동] 원본 출입 조회 ${result.queried}건 | 신규 저장 ${result.written}건`);
+      } catch(e) { failed('원본 출입',e); } finally { attendanceBusy = false; }
   }
   async function snapshotsCycle() {
     if (snapshotsBusy) return; snapshotsBusy = true;
@@ -131,9 +170,13 @@ async function run() {
           const rows = await stableSnapshot(db, 'sa_attendance', 'id,emp_no,log_time', 'id', from);
           const clean = rows.map(({emp_no,log_time}) => ({emp_no,log_time}));
           if (clean.some(r => !r.log_time || !/(Z|[+-]\d\d:\d\d)$/.test(r.log_time))) throw new Error('타임존 없는 출입시각');
-          if (!sourceSnapshot || Date.now() - sourceSnapshot.at > INTERVAL * 2) throw new Error('최근 원본 출입 조회가 없어 보정 중단');
+          const sourceRows = await readSourceWithTimeout(from, new Date().toISOString());
           const present = new Set(clean.map(r => `${r.emp_no}|${Date.parse(r.log_time)}`));
-          if (sourceSnapshot.rows.some(r => !present.has(`${r.emp_no}|${Date.parse(r.log_time)}`))) throw new Error('운영 DB에 아직 반영되지 않은 원본 기록이 있어 보정 중단');
+          const missing = sourceRows.filter(r => !present.has(`${r.emp_no}|${Date.parse(r.log_time)}`));
+          if (missing.length) {
+            for (let i = 0; i < missing.length; i += 500) await send(key, 'sa_attendance', missing.slice(i, i + 500), 'append');
+            throw new Error(`운영 DB에 없는 원본 ${missing.length}건을 인사 DB에 추가 전송하고 전체 보정은 보류`);
+          }
           const result = await send(key, 'sa_attendance', clean, 'replace', from);
           lastCorrectionDate = today;
           console.log(`[인사연동] 출입 보정 ${result.written}건`);
@@ -153,4 +196,4 @@ async function run() {
   setInterval(attendanceCycle, INTERVAL); setInterval(snapshotsCycle, INTERVAL);
 }
 if (require.main === module) run().catch(e => { console.error(`[인사연동] 시작 실패: ${e.message}`); process.exitCode = 1; });
-module.exports = { kstStart, compactKst, rowTime, normalize, send, readAll, stableSnapshot, readAttendance };
+module.exports = { kstStart, compactKst, rowTime, normalize, send, readAll, stableSnapshot, readAttendance, loadCheckpoint, saveCheckpoint, syncIncremental };
