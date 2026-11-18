@@ -576,6 +576,7 @@ export async function fetchAttendanceLogs(yearMonth) {
       LEFT JOIN tong_code tc ON tc.GUBUN_CODE = 'H0281' AND tc.CODE = y.I_CODE
       WHERE y.I_COMPANY = ?
         AND y.I_STATUS = '40'
+        AND COALESCE(TRIM(y.I_STATUS2), '') <> '40'
         AND y.D_START_DATE <= ?
         AND y.D_END_DATE >= ?
         AND ${DEPT_FILTER_SQL}`,
@@ -612,3 +613,4 @@ export async function fetchAttendanceLogs(yearMonth) {
 // 이유: 그룹사 공유 DB에 대한 데이터 생성/수정/삭제는
 //       절대 수행하지 않는 정책을 준수합니다.
 // ============================================================
+

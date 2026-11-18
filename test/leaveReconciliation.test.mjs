@@ -15,7 +15,8 @@ function fixture({ source = [], existing = [], employees = [{ emp_no: '1', compa
       if (params.length >= 3) {
         assert.match(sql, /D_END_DATE >= \? AND y.D_START_DATE <= \?/);
       }
-      return [source];
+      assert.match(sql, /COALESCE\(TRIM\(y\.I_STATUS2\), ''\) <> '40'/);
+      return [source.filter((row) => String(row.cancel_status ?? '').trim() !== '40')];
     }
     return [roster];
   } };
@@ -54,6 +55,18 @@ function fixture({ source = [], existing = [], employees = [{ emp_no: '1', compa
   return { source, rows, writes, queries, sync: (options = {}) => reconciliation.reconcileHrLeaves({ conn, supabase, companyCode: '1600', now: new Date('2026-10-23T00:00:00Z'), ...options }),
     failSource: () => { failSource = true; }, failPage: () => { failPage = true; }, failUpsert: () => { failUpsert = true; } };
 }
+
+test('completed cancellation is excluded while pending cancellation stays approved', async () => {
+  const f = fixture({ source: [
+    leave({ cancel_status: '40' }),
+    leave({ start_date: '20261024', end_date: '20261024', cancel_status: null }),
+    leave({ start_date: '20261025', end_date: '20261025', cancel_status: '20' }),
+  ], existing: [leave()] });
+  const result = await f.sync();
+  assert.equal(result.revoked, 1);
+  assert.equal(f.rows.find((row) => row.start_date === '20261022').status, 'CANCELLED');
+  assert.deepEqual(result.approved.map((row) => row.start_date), ['20261024', '20261025']);
+});
 
 test('yesterday: cancelled annual leave is excluded while replacement half-day stays approved; repeat is unchanged', async () => {
   const f = fixture({ source: [leave({ leave_code: '17', leave_name: '17', leave_days: 0.5 })],
@@ -180,3 +193,4 @@ test('numeric HR name for code 51 stays stored as morning public leave on repeat
   assert.equal(f.rows[0].leave_name, '공가 [오전]');
   assert.equal((await f.sync()).changed, 0);
 });
+

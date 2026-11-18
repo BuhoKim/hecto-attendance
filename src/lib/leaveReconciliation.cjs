@@ -40,6 +40,7 @@ async function reconcileHrLeaves({ conn, supabase, companyCode, empNo = null, no
     LEFT JOIN hr_employee e ON e.I_COMPANY = y.I_COMPANY AND e.I_EMPLOY_NO = y.I_EMPLOY_NO
     LEFT JOIN hr_department d ON d.I_COMPANY = e.I_COMPANY AND d.I_DEPT = e.I_DEPT
     WHERE y.I_COMPANY = ? AND y.I_STATUS = '40'
+      AND COALESCE(TRIM(y.I_STATUS2), '') <> '40'
     ${window ? 'AND y.D_END_DATE >= ? AND y.D_START_DATE <= ?' : ''}
     ${empNo ? 'AND y.I_EMPLOY_NO = ?' : ''}
   `, [companyCode, ...(window ? [window.from, window.to] : []), ...(empNo ? [empNo] : [])]);
@@ -112,3 +113,4 @@ async function reconcileHrLeaves({ conn, supabase, companyCode, empNo = null, no
 }
 
 module.exports = { reconcileHrLeaves, getLeaveReconciliationWindow };
+
